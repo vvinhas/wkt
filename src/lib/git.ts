@@ -1,4 +1,4 @@
-import { exec } from "./utils.ts";
+import { exec, execFile } from "./utils.ts";
 import { resolve } from "node:path";
 
 export function isGitRepo(cwd?: string): boolean {
@@ -40,7 +40,7 @@ export function getCurrentBranch(cwd?: string): string {
 }
 
 export function fetchOrigin(cwd?: string): void {
-  exec("git fetch origin", cwd);
+  execFile("git", ["fetch", "origin"], cwd);
 }
 
 export interface WorktreeInfo {
@@ -82,12 +82,12 @@ export function listWorktrees(cwd?: string): WorktreeInfo[] {
 export function createWorktree(repoPath: string, worktreePath: string, branch: string, baseBranch: string): void {
   try {
     // Try creating with a new branch
-    exec(`git worktree add -b ${branch} "${worktreePath}" ${baseBranch}`, repoPath);
+    execFile("git", ["worktree", "add", "-b", branch, worktreePath, baseBranch], repoPath);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (msg.includes("already exists")) {
       // Branch already exists, attach to it
-      exec(`git worktree add "${worktreePath}" ${branch}`, repoPath);
+      execFile("git", ["worktree", "add", worktreePath, branch], repoPath);
     } else {
       throw e;
     }
@@ -95,5 +95,5 @@ export function createWorktree(repoPath: string, worktreePath: string, branch: s
 }
 
 export function removeWorktree(repoPath: string, worktreePath: string): void {
-  exec(`git worktree remove "${worktreePath}"`, repoPath);
+  execFile("git", ["worktree", "remove", worktreePath], repoPath);
 }
