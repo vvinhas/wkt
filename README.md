@@ -15,16 +15,15 @@ Worktrees let you work on multiple branches simultaneously without stashing or c
 Requires [Bun](https://bun.sh).
 
 ```bash
-bun install -g wkt
-```
+# From npm (scoped package)
+bun install -g @vvinhas/wkt
 
-Or clone and link locally:
+# Or directly from GitHub
+bun install -g github:vvinhas/wkt
 
-```bash
+# Or clone and link locally
 git clone https://github.com/vvinhas/wkt.git
-cd wkt
-bun install
-bun link
+cd wkt && bun install && bun link
 ```
 
 ## Quick Start
