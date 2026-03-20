@@ -6,30 +6,32 @@ import { list } from "./commands/list.ts";
 import { help } from "./commands/help.ts";
 import { setJsonMode } from "./lib/output.ts";
 
-if (process.argv.includes("--json")) {
+const args = process.argv.slice(2);
+
+if (args.includes("--json")) {
   setJsonMode(true);
 }
 
-const command = process.argv[2];
+const command = args.find((a) => !a.startsWith("--"));
+const commandArgs = args.filter((a) => a !== command && a !== "--json");
 
 switch (command) {
   case "add":
-    await add(process.argv.slice(3));
+    await add(commandArgs);
     break;
   case "remove":
-    await remove(process.argv.slice(3));
+    await remove(commandArgs);
     break;
   case "use":
-    await use(process.argv.slice(3));
+    await use(commandArgs);
     break;
   case "config":
-    await config(process.argv.slice(3));
+    await config(commandArgs);
     break;
   case "list":
     await list();
     break;
   case "help":
-  case "--help":
   case "-h":
     help();
     break;
