@@ -1,11 +1,13 @@
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { execSync } from "node:child_process";
 import { loadConfig } from "../lib/config.ts";
 import { getCurrentBranch, fetchOrigin, createWorktree } from "../lib/git.ts";
 import { generateBranchName } from "../lib/utils.ts";
+import { hasFlags, parseFlags, type FlagSchema } from "../lib/flags.ts";
+import { formatSuccess, formatError } from "../lib/output.ts";
 
 interface WorktreeSetup {
   alias: string;
@@ -18,7 +20,200 @@ interface WorktreeSetup {
   startCommands: string[];
 }
 
-export async function use() {
+export interface UseInputs {
+  projects: string[];
+  branch: string;
+  baseBranch?: string;
+  fetch: boolean;
+  runStartCmds: boolean;
+  workspace: boolean;
+  open: boolean;
+}
+
+const flagSchema: FlagSchema[] = [
+  { name: "projects", type: "string[]", required: true },
+  { name: "branch", type: "string", required: true },
+  { name: "base-branch", type: "string", required: false },
+  { name: "fetch", type: "boolean", required: false },
+  { name: "run-start-cmds", type: "boolean", required: false },
+  { name: "workspace", type: "boolean", required: false },
+  { name: "open", type: "boolean", required: false },
+];
+
+export function executeUse(inputs: UseInputs): { created: string[]; errors: string[] } {
+  const config = loadConfig();
+  const cwd = process.cwd();
+  const dirName = basename(cwd);
+
+  // Validate all project aliases exist
+  for (const alias of inputs.projects) {
+    if (!config.projects[alias]) {
+      throw new Error(`Project alias "${alias}" not found in config.`);
+    }
+  }
+
+  const created: string[] = [];
+  const errors: string[] = [];
+
+  // Build setups
+  const setups: WorktreeSetup[] = [];
+  for (const alias of inputs.projects) {
+    const project = config.projects[alias];
+
+    if (!existsSync(project.path)) {
+      errors.push(`${project.label}: repo path not found (${project.path})`);
+      continue;
+    }
+
+    const baseBranch = inputs.baseBranch ?? getCurrentBranch(project.path);
+
+    if (inputs.fetch) {
+      try {
+        fetchOrigin(project.path);
+      } catch (e) {
+        errors.push(`${project.label}: fetch failed - ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+
+    setups.push({
+      alias,
+      label: project.label,
+      repoPath: project.path,
+      baseBranch,
+      branchName: inputs.branch,
+      worktreePath: join(cwd, alias),
+      runStartCmds: inputs.runStartCmds && project.startCommands.length > 0,
+      startCommands: project.startCommands,
+    });
+  }
+
+  // Create worktrees
+  for (const setup of setups) {
+    if (existsSync(setup.worktreePath)) {
+      errors.push(`${setup.label}: directory already exists at ${setup.worktreePath}`);
+      continue;
+    }
+
+    try {
+      createWorktree(setup.repoPath, setup.worktreePath, setup.branchName, setup.baseBranch);
+      created.push(setup.alias);
+    } catch (e) {
+      errors.push(`${setup.label}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  // Run start commands
+  for (const setup of setups) {
+    if (!setup.runStartCmds || setup.startCommands.length === 0) continue;
+    if (!existsSync(setup.worktreePath)) continue;
+
+    try {
+      const shell = process.env.SHELL || "/bin/sh";
+      const cmds = setup.startCommands.join(" && ");
+      execSync(`${shell} -i -c '${cmds}'`, { cwd: setup.worktreePath, stdio: "pipe" });
+    } catch (e) {
+      errors.push(`${setup.label} (start commands): ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  // Create/update VS Code workspace if requested (--open implies --workspace)
+  const shouldWorkspace = inputs.workspace || inputs.open;
+  const createdSetups = setups.filter((s) => existsSync(s.worktreePath));
+
+  if (shouldWorkspace && createdSetups.length > 0) {
+    const workspaceFile = join(cwd, `${dirName}.code-workspace`);
+    const workspaceExists = existsSync(workspaceFile);
+
+    let workspace: { folders: { name: string; path: string }[]; settings: Record<string, unknown> };
+
+    if (workspaceExists) {
+      try {
+        workspace = JSON.parse(readFileSync(workspaceFile, "utf-8"));
+        if (!Array.isArray(workspace.folders)) workspace.folders = [];
+      } catch {
+        workspace = { folders: [], settings: {} };
+      }
+    } else {
+      workspace = { folders: [], settings: {} };
+    }
+
+    const existingPaths = new Set(workspace.folders.map((f) => f.path));
+    if (!existingPaths.has(".")) {
+      workspace.folders.unshift({ name: "Root", path: "." });
+    }
+
+    for (const s of createdSetups) {
+      if (!existingPaths.has(s.alias)) {
+        workspace.folders.push({ name: s.label, path: s.alias });
+      }
+    }
+
+    writeFileSync(workspaceFile, JSON.stringify(workspace, null, 2) + "\n");
+
+    // Hide worktree folders from root's file explorer
+    const vscodeDir = join(cwd, ".vscode");
+    const settingsFile = join(vscodeDir, "settings.json");
+
+    let settings: Record<string, unknown> = {};
+    if (existsSync(settingsFile)) {
+      try {
+        settings = JSON.parse(readFileSync(settingsFile, "utf-8"));
+      } catch {
+        settings = {};
+      }
+    }
+
+    const filesExclude = (settings["files.exclude"] ?? {}) as Record<string, boolean>;
+    for (const s of createdSetups) {
+      filesExclude[s.alias] = true;
+    }
+    settings["files.exclude"] = filesExclude;
+
+    if (!existsSync(vscodeDir)) mkdirSync(vscodeDir);
+    writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + "\n");
+
+    if (inputs.open) {
+      try {
+        execSync(`code "${workspaceFile}"`, { stdio: "ignore" });
+      } catch {
+        // silently ignore - caller can handle
+      }
+    }
+  }
+
+  if (created.length === 0 && errors.length > 0) {
+    throw new Error(errors.join("; "));
+  }
+
+  return { created, errors };
+}
+
+export async function use(argv: string[] = []) {
+  if (hasFlags(argv)) {
+    try {
+      const flags = parseFlags(argv, flagSchema);
+      const result = executeUse({
+        projects: flags.projects as string[],
+        branch: flags.branch as string,
+        baseBranch: flags["base-branch"] as string | undefined,
+        fetch: flags.fetch as boolean,
+        runStartCmds: flags["run-start-cmds"] as boolean,
+        workspace: flags.workspace as boolean,
+        open: flags.open as boolean,
+      });
+      const msg = `${result.created.length} worktree(s) created`;
+      console.log(formatSuccess(
+        result.errors.length > 0 ? `${msg} (with ${result.errors.length} warning(s))` : msg,
+        { created: result.created, errors: result.errors.length > 0 ? result.errors : undefined },
+      ));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(formatError(msg, 2));
+      process.exit(2);
+    }
+    return;
+  }
+
   p.intro(`${pc.bgCyan(pc.black(" wkt "))} Create Worktrees`);
 
   const config = loadConfig();
@@ -169,12 +364,97 @@ export async function use() {
     const cmds = setup.startCommands.join(" && ");
     s.start(`Running start commands for ${setup.label}...`);
     try {
-      execSync(cmds, { cwd: setup.worktreePath, stdio: "pipe" });
+      const shell = process.env.SHELL || "/bin/sh";
+      execSync(`${shell} -i -c '${cmds}'`, { cwd: setup.worktreePath, stdio: "pipe" });
       s.stop(`${pc.green("✓")} Start commands completed for ${setup.label}`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       s.stop(`${pc.red("✗")} Start commands failed for ${setup.label}`);
       errors.push(`${setup.label} (start commands): ${msg}`);
+    }
+  }
+
+  // Offer to create/update a VS Code workspace
+  const createdSetups = setups.filter((s) => existsSync(s.worktreePath));
+
+  if (createdSetups.length > 0) {
+    const workspaceFile = join(cwd, `${dirName}.code-workspace`);
+    const workspaceExists = existsSync(workspaceFile);
+
+    const shouldUpdate = await p.confirm({
+      message: workspaceExists
+        ? `Update VS Code workspace with the new worktrees? (${pc.dim(workspaceFile)})`
+        : "Create a VS Code workspace for these worktrees?",
+      initialValue: false,
+    });
+    if (p.isCancel(shouldUpdate)) {
+      p.cancel("Cancelled.");
+      process.exit(0);
+    }
+
+    if (shouldUpdate) {
+      let workspace: { folders: { name: string; path: string }[]; settings: Record<string, unknown> };
+
+      if (workspaceExists) {
+        try {
+          workspace = JSON.parse(readFileSync(workspaceFile, "utf-8"));
+          if (!Array.isArray(workspace.folders)) workspace.folders = [];
+        } catch {
+          workspace = { folders: [], settings: {} };
+        }
+      } else {
+        workspace = { folders: [], settings: {} };
+      }
+
+      // Ensure root folder is always first
+      const existingPaths = new Set(workspace.folders.map((f) => f.path));
+      if (!existingPaths.has(".")) {
+        workspace.folders.unshift({ name: "Root", path: "." });
+      }
+
+      for (const s of createdSetups) {
+        if (!existingPaths.has(s.alias)) {
+          workspace.folders.push({ name: s.label, path: s.alias });
+        }
+      }
+
+      writeFileSync(workspaceFile, JSON.stringify(workspace, null, 2) + "\n");
+
+      // Hide worktree folders from root's file explorer
+      const vscodeDir = join(cwd, ".vscode");
+      const settingsFile = join(vscodeDir, "settings.json");
+
+      let settings: Record<string, unknown> = {};
+      if (existsSync(settingsFile)) {
+        try {
+          settings = JSON.parse(readFileSync(settingsFile, "utf-8"));
+        } catch {
+          settings = {};
+        }
+      }
+
+      const filesExclude = (settings["files.exclude"] ?? {}) as Record<string, boolean>;
+      for (const s of createdSetups) {
+        filesExclude[s.alias] = true;
+      }
+      settings["files.exclude"] = filesExclude;
+
+      if (!existsSync(vscodeDir)) mkdirSync(vscodeDir);
+      writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + "\n");
+
+      p.log.success(`${workspaceExists ? "Updated" : "Created"} workspace: ${pc.dim(workspaceFile)}`);
+
+      const openNow = await p.confirm({
+        message: "Open it in VS Code now?",
+        initialValue: true,
+      });
+      if (!p.isCancel(openNow) && openNow) {
+        try {
+          execSync(`code "${workspaceFile}"`, { stdio: "ignore" });
+        } catch {
+          p.log.warning("Could not open VS Code. You can open the workspace manually.");
+        }
+      }
     }
   }
 
@@ -185,6 +465,6 @@ export async function use() {
     }
   }
 
-  const created = setups.filter((s) => existsSync(s.worktreePath)).length;
+  const created = createdSetups.length;
   p.outro(`Done! ${created} worktree${created !== 1 ? "s" : ""} created in ${pc.dim(cwd)}`);
 }

@@ -20,7 +20,7 @@ switch (command) {
     await remove(process.argv.slice(3));
     break;
   case "use":
-    await use();
+    await use(process.argv.slice(3));
     break;
   case "config":
     await config(process.argv.slice(3));
