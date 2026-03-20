@@ -1,8 +1,55 @@
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { loadConfig, updateProject } from "../lib/config.ts";
+import { hasFlags, parseFlags, type FlagSchema } from "../lib/flags.ts";
+import { formatSuccess, formatError } from "../lib/output.ts";
 
-export async function config() {
+interface ConfigInputs {
+  alias: string;
+  label?: string;
+  startCommands?: string[];
+}
+
+const flagSchema: FlagSchema[] = [
+  { name: "alias", type: "string", required: true },
+  { name: "label", type: "string", required: false },
+  { name: "start-cmds", type: "string[]", required: false },
+];
+
+export function executeConfig(inputs: ConfigInputs): string {
+  const cfg = loadConfig();
+  const project = cfg.projects[inputs.alias];
+  if (!project) {
+    throw new Error(`Project "${inputs.alias}" not found.`);
+  }
+  if (inputs.label === undefined && inputs.startCommands === undefined) {
+    throw new Error("At least one of --label or --start-cmds is required.");
+  }
+  const updates: Partial<typeof project> = {};
+  if (inputs.label !== undefined) updates.label = inputs.label;
+  if (inputs.startCommands !== undefined) updates.startCommands = inputs.startCommands;
+  updateProject(inputs.alias, updates);
+  return inputs.label ?? project.label;
+}
+
+export async function config(argv: string[] = []) {
+  if (hasFlags(argv)) {
+    try {
+      const flags = parseFlags(argv, flagSchema);
+      const resultLabel = executeConfig({
+        alias: flags.alias as string,
+        label: flags.label as string | undefined,
+        startCommands: flags["start-cmds"] as string[] | undefined,
+      });
+      console.log(formatSuccess(`Updated "${resultLabel}"`));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(formatError(msg, 1));
+      process.exit(1);
+    }
+    return;
+  }
+
   p.intro(`${pc.bgCyan(pc.black(" wkt "))} Configure Project`);
 
   const cfg = loadConfig();
