@@ -21,7 +21,7 @@ bun install -g wkt
 Or clone and link locally:
 
 ```bash
-git clone https://github.com/user/wkt.git
+git clone https://github.com/vvinhas/wkt.git
 cd wkt
 bun install
 bun link

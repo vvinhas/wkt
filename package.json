@@ -12,11 +12,11 @@
     "typecheck": "bunx tsc --noEmit"
   },
   "keywords": ["git", "worktree", "cli", "monorepo", "workspace"],
-  "author": "",
+  "author": "Vini Cavin",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "git+https://github.com/vvinhas/wkt.git"
   },
   "devDependencies": {
     "@types/bun": "latest",
