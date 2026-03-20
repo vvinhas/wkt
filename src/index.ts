@@ -4,6 +4,11 @@ import { use } from "./commands/use.ts";
 import { config } from "./commands/config.ts";
 import { list } from "./commands/list.ts";
 import { help } from "./commands/help.ts";
+import { setJsonMode } from "./lib/output.ts";
+
+if (process.argv.includes("--json")) {
+  setJsonMode(true);
+}
 
 const command = process.argv[2];
 
