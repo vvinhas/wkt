@@ -14,16 +14,16 @@ const command = process.argv[2];
 
 switch (command) {
   case "add":
-    await add();
+    await add(process.argv.slice(3));
     break;
   case "remove":
-    await remove();
+    await remove(process.argv.slice(3));
     break;
   case "use":
     await use();
     break;
   case "config":
-    await config();
+    await config(process.argv.slice(3));
     break;
   case "list":
     await list();

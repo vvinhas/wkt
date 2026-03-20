@@ -2,8 +2,64 @@ import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { isGitRepo, getRepoRoot, getRemoteName } from "../lib/git.ts";
 import { addProject, findProjectByPath } from "../lib/config.ts";
+import { hasFlags, parseFlags, type FlagSchema } from "../lib/flags.ts";
+import { formatSuccess, formatError } from "../lib/output.ts";
 
-export async function add() {
+export interface AddInputs {
+  alias: string;
+  label: string;
+  path: string;
+  startCommands: string[];
+}
+
+const flagSchema: FlagSchema[] = [
+  { name: "alias", type: "string", required: true },
+  { name: "label", type: "string", required: true },
+  { name: "path", type: "string", required: false },
+  { name: "start-cmds", type: "string[]", required: false },
+];
+
+export function executeAdd(inputs: AddInputs): void {
+  if (!/^[a-zA-Z0-9_-]+$/.test(inputs.alias)) {
+    throw new Error(`Alias "${inputs.alias}" contains invalid characters. Only letters, numbers, hyphens, and underscores are allowed.`);
+  }
+
+  if (!isGitRepo(inputs.path)) {
+    throw new Error("Not a git repository. The specified path is not inside a git repo.");
+  }
+
+  const repoRoot = getRepoRoot(inputs.path);
+
+  const existing = findProjectByPath(repoRoot);
+  if (existing) {
+    throw new Error(`This repo is already registered as "${existing.alias}" (${existing.project.label}).`);
+  }
+
+  addProject(inputs.alias, { path: repoRoot, label: inputs.label, startCommands: inputs.startCommands });
+}
+
+export async function add(argv: string[] = []) {
+  if (hasFlags(argv)) {
+    try {
+      const flags = parseFlags(argv, flagSchema);
+      const inputs: AddInputs = {
+        alias: flags.alias as string,
+        label: flags.label as string,
+        path: (flags.path as string) ?? process.cwd(),
+        startCommands: (flags["start-cmds"] as string[]) ?? [],
+      };
+      executeAdd(inputs);
+      console.log(formatSuccess(`Project "${inputs.label}" added as ${inputs.alias}`, {
+        alias: inputs.alias, label: inputs.label,
+      }));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(formatError(msg, 1));
+      process.exit(1);
+    }
+    return;
+  }
+
   p.intro(`${pc.bgCyan(pc.black(" wkt "))} Add Project`);
 
   if (!isGitRepo()) {
@@ -69,7 +125,8 @@ export async function add() {
     .map((s) => s.trim())
     .filter(Boolean);
 
-  addProject(alias, { path: repoRoot, label, startCommands });
+  const inputs: AddInputs = { alias, label, path: repoRoot, startCommands };
+  executeAdd(inputs);
 
   p.outro(`${pc.green("✓")} Project "${pc.bold(label)}" added as ${pc.dim(alias)}`);
 }
