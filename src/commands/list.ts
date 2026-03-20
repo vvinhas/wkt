@@ -2,8 +2,72 @@ import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { loadConfig } from "../lib/config.ts";
 import { listWorktrees, removeWorktree } from "../lib/git.ts";
+import { hasFlags, parseFlags, type FlagSchema } from "../lib/flags.ts";
+import { formatSuccess, formatError } from "../lib/output.ts";
+
+interface ListInputs {
+  alias: string;
+  removePath?: string;
+}
+
+interface ListResult {
+  worktrees: { path: string; branch: string }[];
+}
+
+interface RemoveResult {
+  removed: string;
+}
+
+const flagSchema: FlagSchema[] = [
+  { name: "alias", type: "string", required: true },
+  { name: "remove", type: "string", required: false },
+  { name: "yes", type: "boolean", required: false },
+];
+
+export function executeList(inputs: ListInputs): ListResult | RemoveResult {
+  const config = loadConfig();
+  const project = config.projects[inputs.alias];
+  if (!project) {
+    throw new Error(`Project "${inputs.alias}" not found.`);
+  }
+  if (inputs.removePath) {
+    removeWorktree(project.path, inputs.removePath);
+    return { removed: inputs.removePath };
+  }
+  const worktrees = listWorktrees(project.path)
+    .filter((wt) => !wt.isMain)
+    .map((wt) => ({ path: wt.path, branch: wt.branch }));
+  return { worktrees };
+}
 
 export async function list() {
+  const argv = process.argv.slice(3);
+
+  if (hasFlags(argv)) {
+    try {
+      const flags = parseFlags(argv, flagSchema);
+      const removePath = flags.remove as string | undefined;
+      const result = executeList({ alias: flags.alias as string, removePath });
+
+      if ("removed" in result) {
+        console.log(formatSuccess(`Worktree removed: ${result.removed}`, result as Record<string, unknown>));
+      } else {
+        console.log(formatSuccess(
+          result.worktrees.length > 0
+            ? result.worktrees.map((wt) => `${wt.path} (${wt.branch})`).join("\n")
+            : "No active worktrees.",
+          result as Record<string, unknown>,
+        ));
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const code = msg.includes("not found") ? 1 : 2;
+      console.error(formatError(msg, code));
+      process.exit(code);
+    }
+    return;
+  }
+
   p.intro(`${pc.bgCyan(pc.black(" wkt "))} Worktrees`);
 
   const config = loadConfig();
