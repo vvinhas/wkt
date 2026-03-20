@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 import { add } from "./commands/add.ts";
 import { remove } from "./commands/remove.ts";
 import { use } from "./commands/use.ts";
