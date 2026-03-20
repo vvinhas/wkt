@@ -85,7 +85,8 @@ Output helpers:
 | Flag | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `--alias` | string | yes | - | Which project to remove |
-| `--yes` | boolean | no | true (in flag mode) | Skip confirmation |
+
+Flag mode always proceeds without confirmation (no `--yes` flag needed).
 
 ### `wkt use`
 
