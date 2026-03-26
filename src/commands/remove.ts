@@ -1,7 +1,7 @@
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { rmSync } from "node:fs";
-import { loadConfig } from "../lib/config.ts";
+import { loadConfig, removeProject } from "../lib/config.ts";
 import { REPOS_DIR } from "../lib/git.ts";
 import { hasFlags, parseFlags, type FlagSchema } from "../lib/flags.ts";
 import { formatSuccess, formatError } from "../lib/output.ts";
@@ -63,8 +63,8 @@ export async function remove(argv: string[] = []) {
 
   const isCloned = project.path.startsWith(REPOS_DIR);
   const confirmMsg = isCloned
-    ? `Remove "${project?.label}"? This will also delete the cloned repository.`
-    : `Remove "${project?.label}"? This won't delete the repo or any worktrees.`;
+    ? `Remove "${project.label}"? This will also delete the cloned repository.`
+    : `Remove "${project.label}"? This won't delete the repo or any worktrees.`;
 
   const confirmed = await p.confirm({
     message: confirmMsg,

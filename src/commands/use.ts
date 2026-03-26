@@ -71,7 +71,7 @@ export function executeUse(inputs: UseInputs): { created: string[]; errors: stri
       try {
         pullBranch(baseBranch, project.path);
       } catch (e) {
-        throw new Error(`${project.label}: failed to pull "${baseBranch}" from origin - ${e instanceof Error ? e.message : String(e)}`);
+        errors.push(`${project.label}: failed to pull "${baseBranch}" from origin - ${e instanceof Error ? e.message : String(e)}`);
       }
     }
 
