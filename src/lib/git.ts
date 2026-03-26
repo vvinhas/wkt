@@ -1,5 +1,8 @@
 import { exec, execFile } from "./utils.ts";
-import { resolve } from "node:path";
+import { resolve, join } from "node:path";
+import { WKT_DIR } from "./config.ts";
+
+export const REPOS_DIR = join(WKT_DIR, "repos");
 
 export function isGitRepo(cwd?: string): boolean {
   try {
@@ -39,8 +42,21 @@ export function getCurrentBranch(cwd?: string): string {
   }
 }
 
+export function cloneRepo(url: string, targetDir: string): void {
+  execFile("git", ["clone", url, targetDir]);
+}
+
 export function fetchOrigin(cwd?: string): void {
   execFile("git", ["fetch", "origin"], cwd);
+}
+
+export function pullBranch(branch: string, cwd?: string): void {
+  const current = getCurrentBranch(cwd);
+  if (current === branch) {
+    execFile("git", ["pull", "--ff-only", "origin", branch], cwd);
+  } else {
+    execFile("git", ["fetch", "origin", `${branch}:${branch}`], cwd);
+  }
 }
 
 export interface WorktreeInfo {

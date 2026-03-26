@@ -3,7 +3,8 @@ import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import type { Config, Project } from "../types.ts";
 
-const CONFIG_PATH = join(homedir(), ".config", "wkt", "config.json");
+export const WKT_DIR = join(homedir(), ".wkt");
+const CONFIG_PATH = join(WKT_DIR, "config.json");
 
 function ensureDir(filePath: string): void {
   const dir = dirname(filePath);
@@ -54,6 +55,16 @@ export function findProjectByPath(repoPath: string): { alias: string; project: P
   const config = loadConfig();
   for (const [alias, project] of Object.entries(config.projects)) {
     if (project.path === repoPath) {
+      return { alias, project };
+    }
+  }
+  return undefined;
+}
+
+export function findProjectByUrl(url: string): { alias: string; project: Project } | undefined {
+  const config = loadConfig();
+  for (const [alias, project] of Object.entries(config.projects)) {
+    if (project.url === url) {
       return { alias, project };
     }
   }

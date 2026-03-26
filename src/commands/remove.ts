@@ -1,6 +1,8 @@
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { loadConfig, removeProject } from "../lib/config.ts";
+import { rmSync } from "node:fs";
+import { loadConfig } from "../lib/config.ts";
+import { REPOS_DIR } from "../lib/git.ts";
 import { hasFlags, parseFlags, type FlagSchema } from "../lib/flags.ts";
 import { formatSuccess, formatError } from "../lib/output.ts";
 
@@ -15,6 +17,9 @@ export function executeRemove(inputs: { alias: string }): string {
     throw new Error(`Project "${inputs.alias}" not found.`);
   }
   removeProject(inputs.alias);
+  if (project.path.startsWith(REPOS_DIR)) {
+    rmSync(project.path, { recursive: true, force: true });
+  }
   return project.label;
 }
 
@@ -54,17 +59,22 @@ export async function remove(argv: string[] = []) {
     process.exit(0);
   }
 
-  const project = config.projects[alias];
+  const project = config.projects[alias]!;
+
+  const isCloned = project.path.startsWith(REPOS_DIR);
+  const confirmMsg = isCloned
+    ? `Remove "${project?.label}"? This will also delete the cloned repository.`
+    : `Remove "${project?.label}"? This won't delete the repo or any worktrees.`;
 
   const confirmed = await p.confirm({
-    message: `Remove "${project?.label}"? This won't delete the repo or any worktrees.`,
+    message: confirmMsg,
   });
   if (p.isCancel(confirmed) || !confirmed) {
     p.cancel("Cancelled.");
     process.exit(0);
   }
 
-  removeProject(alias);
+  executeRemove({ alias });
 
-  p.outro(`${pc.green("✓")} Removed "${pc.bold(project?.label ?? alias)}"`);
+  p.outro(`${pc.green("✓")} Removed "${pc.bold(project.label)}"`);
 }

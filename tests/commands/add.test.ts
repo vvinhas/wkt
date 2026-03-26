@@ -4,20 +4,14 @@ import { executeAdd } from "../../src/commands/add.ts";
 describe("executeAdd", () => {
   it("rejects alias with invalid characters", () => {
     expect(() =>
-      executeAdd({ alias: "my/app", label: "My App", path: "/tmp", startCommands: [] })
+      executeAdd({ url: "https://github.com/user/repo.git", alias: "my/app", label: "My App", startCommands: [] })
     ).toThrow("invalid characters");
   });
 
-  it("rejects path that is not a git repo", () => {
-    expect(() =>
-      executeAdd({ alias: "myapp", label: "My App", path: "/tmp", startCommands: [] })
-    ).toThrow("Not a git repository");
-  });
-
   it("accepts a valid alias format", () => {
-    // Will fail on "Not a git repo" but should NOT fail on alias validation
+    // Will fail on clone or similar, but should NOT fail on alias validation
     expect(() =>
-      executeAdd({ alias: "my-app_1", label: "Test", path: "/tmp", startCommands: [] })
-    ).toThrow("Not a git repository");
+      executeAdd({ url: "https://github.com/user/repo.git", alias: "my-app_1", label: "Test", startCommands: [] })
+    ).not.toThrow("invalid characters");
   });
 });

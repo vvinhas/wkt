@@ -1,42 +1,43 @@
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { loadConfig } from "../lib/config.ts";
-import { listWorktrees } from "../lib/git.ts";
+import { listWorktrees, removeWorktree } from "../lib/git.ts";
 import { hasFlags, parseFlags, type FlagSchema } from "../lib/flags.ts";
 import { formatSuccess, formatError } from "../lib/output.ts";
 
-interface ListResult {
-  worktrees: { path: string; branch: string }[];
+interface ClearInputs {
+  alias: string;
+  worktreePath: string;
+}
+
+interface ClearResult {
+  removed: string;
 }
 
 const flagSchema: FlagSchema[] = [
   { name: "alias", type: "string", required: true },
+  { name: "path", type: "string", required: true },
 ];
 
-export function executeList(inputs: { alias: string }): ListResult {
+export function executeClear(inputs: ClearInputs): ClearResult {
   const config = loadConfig();
   const project = config.projects[inputs.alias];
   if (!project) {
     throw new Error(`Project "${inputs.alias}" not found.`);
   }
-  const worktrees = listWorktrees(project.path)
-    .filter((wt) => !wt.isMain)
-    .map((wt) => ({ path: wt.path, branch: wt.branch }));
-  return { worktrees };
+  removeWorktree(project.path, inputs.worktreePath);
+  return { removed: inputs.worktreePath };
 }
 
-export async function list(argv: string[] = []) {
+export async function clear(argv: string[] = []) {
   if (hasFlags(argv)) {
     try {
       const flags = parseFlags(argv, flagSchema);
-      const result = executeList({ alias: flags.alias as string });
-
-      console.log(formatSuccess(
-        result.worktrees.length > 0
-          ? result.worktrees.map((wt) => `${wt.path} (${wt.branch})`).join("\n")
-          : "No active worktrees.",
-        result as unknown as Record<string, unknown>,
-      ));
+      const result = executeClear({
+        alias: flags.alias as string,
+        worktreePath: flags.path as string,
+      });
+      console.log(formatSuccess(`Worktree removed: ${result.removed}`, result as unknown as Record<string, unknown>));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       const code = msg.includes("not found") ? 1 : 2;
@@ -46,7 +47,7 @@ export async function list(argv: string[] = []) {
     return;
   }
 
-  p.intro(`${pc.bgCyan(pc.black(" wkt "))} Worktrees`);
+  p.intro(`${pc.bgCyan(pc.black(" wkt "))} Clear Worktree`);
 
   const config = loadConfig();
   const entries = Object.entries(config.projects);
@@ -81,9 +82,34 @@ export async function list(argv: string[] = []) {
     return;
   }
 
-  p.log.info(`Active worktrees for ${pc.bold(project.label)}:\n`);
-  for (const wt of worktrees) {
-    p.log.message(`  ${pc.cyan(wt.path)}\n    Branch: ${pc.dim(wt.branch)}\n`);
+  const toRemove = await p.select({
+    message: "Which worktree to remove?",
+    options: worktrees.map((wt) => ({
+      value: wt.path,
+      label: `${wt.path} (${wt.branch})`,
+    })),
+  });
+  if (p.isCancel(toRemove)) {
+    p.cancel("Cancelled.");
+    process.exit(0);
+  }
+
+  const confirmed = await p.confirm({
+    message: `Remove worktree at ${toRemove}?`,
+  });
+  if (p.isCancel(confirmed) || !confirmed) {
+    p.cancel("Cancelled.");
+    process.exit(0);
+  }
+
+  const s = p.spinner();
+  s.start("Removing worktree...");
+  try {
+    removeWorktree(project.path, toRemove);
+    s.stop(`${pc.green("✓")} Worktree removed`);
+  } catch (e) {
+    s.stop(`${pc.red("✗")} Failed to remove worktree`);
+    p.log.error(e instanceof Error ? e.message : String(e));
   }
 
   p.outro("Done");

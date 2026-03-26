@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { execSync } from "node:child_process";
 import { loadConfig } from "../lib/config.ts";
-import { getCurrentBranch, fetchOrigin, createWorktree } from "../lib/git.ts";
+import { getCurrentBranch, pullBranch, createWorktree } from "../lib/git.ts";
 import { generateBranchName } from "../lib/utils.ts";
 import { hasFlags, parseFlags, type FlagSchema } from "../lib/flags.ts";
 import { formatSuccess, formatError } from "../lib/output.ts";
@@ -69,9 +69,9 @@ export function executeUse(inputs: UseInputs): { created: string[]; errors: stri
 
     if (inputs.fetch) {
       try {
-        fetchOrigin(project.path);
+        pullBranch(baseBranch, project.path);
       } catch (e) {
-        errors.push(`${project.label}: fetch failed - ${e instanceof Error ? e.message : String(e)}`);
+        throw new Error(`${project.label}: failed to pull "${baseBranch}" from origin - ${e instanceof Error ? e.message : String(e)}`);
       }
     }
 
@@ -267,7 +267,7 @@ export async function use(argv: string[] = []) {
     }
 
     const doFetch = await p.confirm({
-      message: "Fetch latest from origin first?",
+      message: "Pull latest from origin first?",
       initialValue: false,
     });
     if (p.isCancel(doFetch)) {
@@ -277,13 +277,14 @@ export async function use(argv: string[] = []) {
 
     if (doFetch) {
       const s = p.spinner();
-      s.start(`Fetching origin for ${project.label}...`);
+      s.start(`Pulling "${baseBranch}" from origin for ${project.label}...`);
       try {
-        fetchOrigin(project.path);
-        s.stop(`Fetched origin for ${project.label}`);
+        pullBranch(baseBranch, project.path);
+        s.stop(`Pulled "${baseBranch}" for ${project.label}`);
       } catch (e) {
-        s.stop(`Failed to fetch origin for ${project.label}`);
-        p.log.warning(e instanceof Error ? e.message : String(e));
+        s.stop(`${pc.red("✗")} Failed to pull "${baseBranch}" for ${project.label}`);
+        p.cancel(e instanceof Error ? e.message : String(e));
+        process.exit(1);
       }
     }
 

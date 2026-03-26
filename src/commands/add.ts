@@ -1,21 +1,24 @@
+import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { isGitRepo, getRepoRoot, getRemoteName } from "../lib/git.ts";
-import { addProject, findProjectByPath } from "../lib/config.ts";
+import { cloneRepo, REPOS_DIR } from "../lib/git.ts";
+import { addProject, findProjectByUrl } from "../lib/config.ts";
+import { parseRepoNameFromUrl } from "../lib/utils.ts";
 import { hasFlags, parseFlags, type FlagSchema } from "../lib/flags.ts";
 import { formatSuccess, formatError } from "../lib/output.ts";
 
 export interface AddInputs {
+  url: string;
   alias: string;
   label: string;
-  path: string;
   startCommands: string[];
 }
 
 const flagSchema: FlagSchema[] = [
-  { name: "alias", type: "string", required: true },
-  { name: "label", type: "string", required: true },
-  { name: "path", type: "string", required: false },
+  { name: "url", type: "string", required: true },
+  { name: "alias", type: "string", required: false },
+  { name: "label", type: "string", required: false },
   { name: "start-cmds", type: "string[]", required: false },
 ];
 
@@ -24,28 +27,46 @@ export function executeAdd(inputs: AddInputs): void {
     throw new Error(`Alias "${inputs.alias}" contains invalid characters. Only letters, numbers, hyphens, and underscores are allowed.`);
   }
 
-  if (!isGitRepo(inputs.path)) {
-    throw new Error("Not a git repository. The specified path is not inside a git repo.");
-  }
-
-  const repoRoot = getRepoRoot(inputs.path);
-
-  const existing = findProjectByPath(repoRoot);
+  const existing = findProjectByUrl(inputs.url);
   if (existing) {
     throw new Error(`This repo is already registered as "${existing.alias}" (${existing.project.label}).`);
   }
 
-  addProject(inputs.alias, { path: repoRoot, label: inputs.label, startCommands: inputs.startCommands });
+  const clonePath = join(REPOS_DIR, inputs.alias);
+
+  if (existsSync(clonePath)) {
+    throw new Error(`Directory already exists at ${clonePath}.`);
+  }
+
+  mkdirSync(REPOS_DIR, { recursive: true });
+
+  try {
+    cloneRepo(inputs.url, clonePath);
+  } catch (e) {
+    if (existsSync(clonePath)) {
+      rmSync(clonePath, { recursive: true, force: true });
+    }
+    throw e;
+  }
+
+  addProject(inputs.alias, {
+    path: clonePath,
+    label: inputs.label,
+    startCommands: inputs.startCommands,
+    url: inputs.url,
+  });
 }
 
 export async function add(argv: string[] = []) {
   if (hasFlags(argv)) {
     try {
       const flags = parseFlags(argv, flagSchema);
+      const url = flags.url as string;
+      const defaultName = parseRepoNameFromUrl(url);
       const inputs: AddInputs = {
-        alias: flags.alias as string,
-        label: flags.label as string,
-        path: (flags.path as string) ?? process.cwd(),
+        url,
+        alias: (flags.alias as string) ?? defaultName,
+        label: (flags.label as string) ?? defaultName,
         startCommands: (flags["start-cmds"] as string[]) ?? [],
       };
       executeAdd(inputs);
@@ -62,28 +83,22 @@ export async function add(argv: string[] = []) {
 
   p.intro(`${pc.bgCyan(pc.black(" wkt "))} Add Project`);
 
-  if (!isGitRepo()) {
-    p.cancel("Not a git repository. Run this from inside a git repo.");
-    process.exit(1);
+  const url = await p.text({
+    message: "Repository URL:",
+    placeholder: "https://github.com/user/repo.git",
+    validate: (v) => {
+      if (!v?.trim()) return "URL cannot be empty";
+      if (!/^https?:\/\/.+\/.+/.test(v) && !/^git@.+:.+\/.+/.test(v)) {
+        return "Enter a valid git URL (HTTPS or SSH)";
+      }
+    },
+  });
+  if (p.isCancel(url)) {
+    p.cancel("Cancelled.");
+    process.exit(0);
   }
 
-  const repoRoot = getRepoRoot();
-
-  const existing = findProjectByPath(repoRoot);
-  if (existing) {
-    p.cancel(`This repo is already registered as "${existing.alias}" (${existing.project.label}).`);
-    process.exit(1);
-  }
-
-  let defaultName: string;
-  try {
-    defaultName = getRemoteName();
-  } catch {
-    p.cancel("No 'origin' remote found. Add one with: git remote add origin <url>");
-    process.exit(1);
-  }
-
-  p.log.info(`Detected: ${pc.bold(defaultName)} (${pc.dim(repoRoot)})`);
+  const defaultName = parseRepoNameFromUrl(url);
 
   const label = await p.text({
     message: "What should we call this project?",
@@ -98,7 +113,7 @@ export async function add(argv: string[] = []) {
   }
 
   const alias = await p.text({
-    message: "Alias (used as folder name in worktrees)?",
+    message: "Alias (used as folder name)?",
     initialValue: defaultName,
     validate: (v) => {
       if (!v?.trim()) return "Alias cannot be empty";
@@ -125,8 +140,18 @@ export async function add(argv: string[] = []) {
     .map((s) => s.trim())
     .filter(Boolean);
 
-  const inputs: AddInputs = { alias, label, path: repoRoot, startCommands };
-  executeAdd(inputs);
+  const s = p.spinner();
+  s.start("Cloning repository...");
+
+  try {
+    executeAdd({ url, alias, label, startCommands });
+    s.stop("Repository cloned.");
+  } catch (e) {
+    s.stop("Clone failed.");
+    const msg = e instanceof Error ? e.message : String(e);
+    p.cancel(msg);
+    process.exit(1);
+  }
 
   p.outro(`${pc.green("✓")} Project "${pc.bold(label)}" added as ${pc.dim(alias)}`);
 }

@@ -29,19 +29,18 @@ cd wkt && bun install && bun link
 ## Quick Start
 
 ```bash
-# 1. Register repos (run from inside each git repo)
-cd ~/code/my-api
-wkt add
-
-cd ~/code/my-frontend
-wkt add
+# 1. Add repos by URL (clones to ~/.wkt/repos/)
+wkt add   # prompts for URL, or:
+wkt add --url https://github.com/you/my-api.git
+wkt add --url git@github.com:you/my-frontend.git
 
 # 2. Create worktrees for a feature
 mkdir ~/features/login-redesign && cd ~/features/login-redesign
 wkt use
 
-# 3. Manage existing worktrees
-wkt list
+# 3. View and manage worktrees
+wkt list    # view active worktrees
+wkt clear   # remove a worktree
 ```
 
 ## Commands
@@ -50,18 +49,19 @@ Every command works in two modes: **interactive** (no flags, TUI prompts) and **
 
 | Command | Description | Non-interactive flags |
 |---------|-------------|----------------------|
-| `add` | Register current repo as a project | `--alias <name> --label <name> [--path <dir>] [--start-cmds <a,b>]` |
+| `add` | Clone a repo and register it as a project | `--url <url> [--alias <name>] [--label <name>] [--start-cmds <a,b>]` |
 | `remove` | Remove a saved project | `--alias <name>` |
 | `use` | Create worktrees for selected projects | `--projects <a,b> --branch <name> [--base-branch <name>] [--fetch] [--run-start-cmds] [--workspace] [--open]` |
 | `config` | Update a project's label or start commands | `--alias <name> [--label <name>] [--start-cmds <a,b>]` |
-| `list` | View or remove worktrees for a project | `--alias <name> [--remove <path>] [--yes]` |
+| `list` | View active worktrees for a project | `--alias <name>` |
+| `clear` | Remove a worktree | `--alias <name> --path <worktree-path>` |
 | `help` | Show help message | |
 
 ### Examples
 
 ```bash
-# Non-interactive: register a project
-wkt add --alias api --label "Backend API" --start-cmds "bun install"
+# Non-interactive: clone and register a project
+wkt add --url https://github.com/you/api.git --alias api --label "Backend API" --start-cmds "bun install"
 
 # Non-interactive: create worktrees for two projects
 wkt use --projects api,web --branch feat/login --base-branch main --fetch --workspace --open
@@ -70,7 +70,7 @@ wkt use --projects api,web --branch feat/login --base-branch main --fetch --work
 wkt list --alias api
 
 # Non-interactive: remove a worktree
-wkt list --alias api --remove /path/to/worktree --yes
+wkt clear --alias api --path /path/to/worktree
 ```
 
 ## JSON Output
@@ -93,15 +93,16 @@ Error responses follow the same shape:
 
 ## Configuration
 
-Config is stored at `~/.config/wkt/config.json`.
+Config is stored at `~/.wkt/config.json`. Cloned repos live in `~/.wkt/repos/`.
 
 ```json
 {
   "projects": {
     "api": {
-      "path": "/Users/you/code/my-api",
+      "path": "/Users/you/.wkt/repos/api",
       "label": "Backend API",
-      "startCommands": ["bun install"]
+      "startCommands": ["bun install"],
+      "url": "https://github.com/you/api.git"
     }
   }
 }
@@ -109,10 +110,11 @@ Config is stored at `~/.config/wkt/config.json`.
 
 Each project has:
 
-- **path** -- absolute path to the git repo root
+- **path** -- absolute path to the cloned repo
 - **label** -- display name shown in prompts
 - **alias** -- the key in the config (also used as the worktree folder name)
 - **startCommands** -- commands to run after creating a worktree (e.g., install dependencies)
+- **url** -- the original clone URL
 
 ## VS Code Workspace
 
