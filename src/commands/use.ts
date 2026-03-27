@@ -30,6 +30,22 @@ export interface UseInputs {
   open: boolean;
 }
 
+export interface ProjectSetupInput {
+  alias: string;
+  branch: string;
+  baseBranch?: string;
+  fetch: boolean;
+  runStartCmds: boolean;
+}
+
+export interface ProjectSetupResult {
+  alias: string;
+  label: string;
+  worktreePath: string;
+  created: boolean;
+  errors: string[];
+}
+
 const flagSchema: FlagSchema[] = [
   { name: "projects", type: "string[]", required: true },
   { name: "branch", type: "string", required: true },
@@ -39,6 +55,60 @@ const flagSchema: FlagSchema[] = [
   { name: "workspace", type: "boolean", required: false },
   { name: "open", type: "boolean", required: false },
 ];
+
+export function executeProject(input: ProjectSetupInput): ProjectSetupResult {
+  const config = loadConfig();
+  const project = config.projects[input.alias];
+
+  if (!project) {
+    throw new Error(`Project alias "${input.alias}" not found in config.`);
+  }
+
+  const cwd = process.cwd();
+  const worktreePath = join(cwd, input.alias);
+  const errors: string[] = [];
+  let created = false;
+
+  if (!existsSync(project.path)) {
+    errors.push(`${project.label}: repo path not found (${project.path})`);
+    return { alias: input.alias, label: project.label, worktreePath, created, errors };
+  }
+
+  const baseBranch = input.baseBranch ?? getCurrentBranch(project.path);
+
+  if (input.fetch) {
+    try {
+      pullBranch(baseBranch, project.path);
+    } catch (e) {
+      errors.push(`${project.label}: failed to pull "${baseBranch}" from origin - ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  if (existsSync(worktreePath)) {
+    errors.push(`${project.label}: directory already exists at ${worktreePath}`);
+    return { alias: input.alias, label: project.label, worktreePath, created, errors };
+  }
+
+  try {
+    createWorktree(project.path, worktreePath, input.branch, baseBranch);
+    created = true;
+  } catch (e) {
+    errors.push(`${project.label}: ${e instanceof Error ? e.message : String(e)}`);
+    return { alias: input.alias, label: project.label, worktreePath, created, errors };
+  }
+
+  if (input.runStartCmds && project.startCommands.length > 0) {
+    try {
+      const shell = process.env.SHELL || "/bin/sh";
+      const cmds = project.startCommands.join(" && ");
+      execSync(`${shell} -i -c '${cmds}'`, { cwd: worktreePath, stdio: "pipe" });
+    } catch (e) {
+      errors.push(`${project.label} (start commands): ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  return { alias: input.alias, label: project.label, worktreePath, created, errors };
+}
 
 export function executeUse(inputs: UseInputs): { created: string[]; errors: string[] } {
   const config = loadConfig();
