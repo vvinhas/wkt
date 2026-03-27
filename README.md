@@ -51,7 +51,7 @@ Every command works in two modes: **interactive** (no flags, TUI prompts) and **
 |---------|-------------|----------------------|
 | `add` | Clone a repo and register it as a project | `--url <url> [--alias <name>] [--label <name>] [--start-cmds <a,b>]` |
 | `remove` | Remove a saved project | `--alias <name>` |
-| `use` | Create worktrees for selected projects | `--projects <a,b> --branch <name> [--base-branch <name>] [--fetch] [--run-start-cmds] [--workspace] [--open]` |
+| `use` | Create worktrees for selected projects | `--project <name> --branch <name> [--base-branch <name>] [--fetch] [--run-start-cmds]` |
 | `config` | Update a project's label or start commands | `--alias <name> [--label <name>] [--start-cmds <a,b>]` |
 | `list` | View active worktrees for a project | `--alias <name>` |
 | `clear` | Remove a worktree | `--alias <name> --path <worktree-path>` |
@@ -63,8 +63,8 @@ Every command works in two modes: **interactive** (no flags, TUI prompts) and **
 # Non-interactive: clone and register a project
 wkt add --url https://github.com/you/api.git --alias api --label "Backend API" --start-cmds "bun install"
 
-# Non-interactive: create worktrees for two projects
-wkt use --projects api,web --branch feat/login --base-branch main --fetch --workspace --open
+# Non-interactive: create a worktree for a project
+wkt use --project api --branch feat/login --base-branch main --fetch
 
 # Non-interactive: list worktrees
 wkt list --alias api
@@ -78,11 +78,11 @@ wkt clear --alias api --path /path/to/worktree
 Add `--json` to any command for structured output, useful for scripting:
 
 ```bash
-wkt use --projects api --branch feat/login --json
+wkt use --project api --branch feat/login --json
 ```
 
 ```json
-{"success": true, "data": {"created": ["api"], "errors": []}}
+{"success": true, "data": {"created": "api", "worktreePath": "/path/to/worktree/api"}}
 ```
 
 Error responses follow the same shape:
@@ -118,7 +118,7 @@ Each project has:
 
 ## VS Code Workspace
 
-When using `wkt use`, you can generate a `.code-workspace` file that includes all created worktrees as folders. Use `--workspace` to create/update the file, or `--open` to also open it in VS Code.
+In interactive mode, `wkt use` can generate a `.code-workspace` file that includes all created worktrees as folders and optionally open it in VS Code.
 
 ## Requirements
 
