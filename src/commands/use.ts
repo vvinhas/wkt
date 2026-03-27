@@ -180,13 +180,13 @@ export async function use(argv: string[] = []) {
     }
 
     if (doFetch) {
-      const fs = p.spinner();
-      fs.start(`Pulling "${baseBranch}" from origin for ${project.label}...`);
+      const fetchSpinner = p.spinner();
+      fetchSpinner.start(`Pulling "${baseBranch}" from origin for ${project.label}...`);
       try {
         pullBranch(baseBranch, project.path);
-        fs.stop(`Pulled "${baseBranch}" for ${project.label}`);
+        fetchSpinner.stop(`Pulled "${baseBranch}" for ${project.label}`);
       } catch (e) {
-        fs.stop(`${pc.red("✗")} Failed to pull "${baseBranch}" for ${project.label}`);
+        fetchSpinner.stop(`${pc.red("✗")} Failed to pull "${baseBranch}" for ${project.label}`);
         p.cancel(e instanceof Error ? e.message : String(e));
         process.exit(1);
       }
