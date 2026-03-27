@@ -56,6 +56,7 @@ const flagSchema: FlagSchema[] = [
   { name: "open", type: "boolean", required: false },
 ];
 
+/** Throws if alias is not in config. Returns errors for runtime failures (missing path, pull, etc). */
 export function executeProject(input: ProjectSetupInput): ProjectSetupResult {
   const config = loadConfig();
   const project = config.projects[input.alias];

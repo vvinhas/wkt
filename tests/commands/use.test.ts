@@ -13,7 +13,7 @@ describe("executeProject", () => {
     ).toThrow("not found");
   });
 
-  it("returns created:false with error when repo path does not exist", () => {
+  it("throws for any unknown alias", () => {
     expect(() =>
       executeProject({
         alias: "also-nonexistent",
