@@ -47,13 +47,11 @@ export interface ProjectSetupResult {
 }
 
 const flagSchema: FlagSchema[] = [
-  { name: "projects", type: "string[]", required: true },
+  { name: "project", type: "string", required: true },
   { name: "branch", type: "string", required: true },
   { name: "base-branch", type: "string", required: false },
   { name: "fetch", type: "boolean", required: false },
   { name: "run-start-cmds", type: "boolean", required: false },
-  { name: "workspace", type: "boolean", required: false },
-  { name: "open", type: "boolean", required: false },
 ];
 
 /** Throws if alias is not in config. Returns errors for runtime failures (missing path, pull, etc). */
@@ -263,19 +261,23 @@ export async function use(argv: string[] = []) {
   if (hasFlags(argv)) {
     try {
       const flags = parseFlags(argv, flagSchema);
-      const result = executeUse({
-        projects: flags.projects as string[],
+      const result = executeProject({
+        alias: flags.project as string,
         branch: flags.branch as string,
         baseBranch: flags["base-branch"] as string | undefined,
         fetch: flags.fetch as boolean,
         runStartCmds: flags["run-start-cmds"] as boolean,
-        workspace: flags.workspace as boolean,
-        open: flags.open as boolean,
       });
-      const msg = `${result.created.length} worktree(s) created`;
+
+      if (!result.created) {
+        console.error(formatError(result.errors.join("; "), 2));
+        process.exit(2);
+      }
+
+      const msg = "Worktree created";
       console.log(formatSuccess(
         result.errors.length > 0 ? `${msg} (with ${result.errors.length} warning(s))` : msg,
-        { created: result.created, errors: result.errors.length > 0 ? result.errors : undefined },
+        { created: result.alias, worktreePath: result.worktreePath, errors: result.errors.length > 0 ? result.errors : undefined },
       ));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
