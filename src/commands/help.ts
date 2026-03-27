@@ -26,8 +26,8 @@ ${pc.bold("Non-interactive mode:")}
 
   ${pc.cyan("wkt add")}    --url <url> [--alias <name>] [--label <name>] [--start-cmds <cmds>]
   ${pc.cyan("wkt remove")} --alias <name>
-  ${pc.cyan("wkt use")}    --projects <a,b> --branch <name> [--base-branch <name>]
-               [--fetch] [--run-start-cmds] [--workspace] [--open]
+  ${pc.cyan("wkt use")}    --project <name> --branch <name> [--base-branch <name>]
+               [--fetch] [--run-start-cmds]
   ${pc.cyan("wkt config")} --alias <name> [--label <name>] [--start-cmds <cmds>]
   ${pc.cyan("wkt list")}   --alias <name>
   ${pc.cyan("wkt clear")}  --alias <name> --path <worktree-path>
