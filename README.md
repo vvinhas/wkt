@@ -35,8 +35,8 @@ wkt add --url https://github.com/you/my-api.git
 wkt add --url git@github.com:you/my-frontend.git
 
 # 2. Create worktrees for a feature
-mkdir ~/features/login-redesign && cd ~/features/login-redesign
-wkt use
+wkt use --dir ~/features/login-redesign
+# or: cd into an existing dir first, then run `wkt use`
 
 # 3. View and manage worktrees
 wkt list    # view active worktrees
@@ -47,11 +47,13 @@ wkt clear   # remove a worktree
 
 Every command works in two modes: **interactive** (no flags, TUI prompts) and **non-interactive** (all options as flags, for scripts and AI agents).
 
+For `wkt use`, flags other than `--project` (`--dir`, `--branch`, `--base-branch`, `--fetch`, `--run-start-cmds`) can also be mixed with interactive mode -- any flag you pass pre-fills and skips its matching prompt.
+
 | Command | Description | Non-interactive flags |
 |---------|-------------|----------------------|
 | `add` | Clone a repo and register it as a project | `--url <url> [--alias <name>] [--label <name>] [--start-cmds <a,b>]` |
 | `remove` | Remove a saved project | `--alias <name>` |
-| `use` | Create worktrees for selected projects | `--project <name> --branch <name> [--base-branch <name>] [--fetch] [--run-start-cmds]` |
+| `use` | Create worktrees for selected projects | `--project <name> --branch <name> [--base-branch <name>] [--fetch] [--run-start-cmds] [--dir <path>]` |
 | `config` | Update a project's label or start commands | `--alias <name> [--label <name>] [--start-cmds <a,b>]` |
 | `list` | View active worktrees for a project | `--alias <name>` |
 | `clear` | Remove a worktree | `--alias <name> --path <worktree-path>` |
@@ -65,6 +67,9 @@ wkt add --url https://github.com/you/api.git --alias api --label "Backend API" -
 
 # Non-interactive: create a worktree for a project
 wkt use --project api --branch feat/login --base-branch main --fetch
+
+# Non-interactive: place the worktree in a specific directory (created if missing)
+wkt use --project api --branch feat/login --dir ~/features/login-redesign
 
 # Non-interactive: list worktrees
 wkt list --alias api

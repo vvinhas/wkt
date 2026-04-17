@@ -1,12 +1,12 @@
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { execSync } from "node:child_process";
 import { loadConfig } from "../lib/config.ts";
 import { getCurrentBranch, pullBranch, createWorktree } from "../lib/git.ts";
 import { generateBranchName } from "../lib/utils.ts";
-import { hasFlags, parseFlags, type FlagSchema } from "../lib/flags.ts";
+import { hasFlags, parseFlags, extractGlobalFlags, type FlagSchema, type GlobalFlagSchema } from "../lib/flags.ts";
 import { formatSuccess, formatError } from "../lib/output.ts";
 
 export interface ProjectSetupInput {
@@ -15,6 +15,7 @@ export interface ProjectSetupInput {
   baseBranch?: string;
   fetch: boolean;
   runStartCmds: boolean;
+  dir?: string;
 }
 
 export interface ProjectSetupResult {
@@ -25,12 +26,16 @@ export interface ProjectSetupResult {
   errors: string[];
 }
 
+const globalSchema: GlobalFlagSchema[] = [
+  { name: "dir", type: "string" },
+  { name: "branch", type: "string" },
+  { name: "base-branch", type: "string" },
+  { name: "fetch", type: "boolean" },
+  { name: "run-start-cmds", type: "boolean" },
+];
+
 const flagSchema: FlagSchema[] = [
   { name: "project", type: "string", required: true },
-  { name: "branch", type: "string", required: true },
-  { name: "base-branch", type: "string", required: false },
-  { name: "fetch", type: "boolean", required: false },
-  { name: "run-start-cmds", type: "boolean", required: false },
 ];
 
 /** Throws if alias is not in config. Returns errors for runtime failures (missing path, pull, etc). */
@@ -42,8 +47,9 @@ export function executeProject(input: ProjectSetupInput): ProjectSetupResult {
     throw new Error(`Project alias "${input.alias}" not found in config.`);
   }
 
-  const cwd = process.cwd();
-  const worktreePath = join(cwd, input.alias);
+  const baseDir = input.dir ? resolve(input.dir) : process.cwd();
+  if (input.dir && !existsSync(baseDir)) mkdirSync(baseDir, { recursive: true });
+  const worktreePath = join(baseDir, input.alias);
   const errors: string[] = [];
   let created = false;
 
@@ -78,8 +84,9 @@ export function executeProject(input: ProjectSetupInput): ProjectSetupResult {
   if (input.runStartCmds && project.startCommands.length > 0) {
     try {
       const shell = process.env.SHELL || "/bin/sh";
+      const rcFile = shell.includes("zsh") ? "$HOME/.zshrc" : "$HOME/.bashrc";
       const cmds = project.startCommands.join(" && ");
-      execSync(`${shell} -i -c '${cmds}'`, { cwd: worktreePath, stdio: "pipe" });
+      execSync(`${shell} -l -c '. ${rcFile} 2>/dev/null; ${cmds}'`, { cwd: worktreePath, stdio: "pipe" });
     } catch (e) {
       errors.push(`${project.label} (start commands): ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -89,15 +96,26 @@ export function executeProject(input: ProjectSetupInput): ProjectSetupResult {
 }
 
 export async function use(argv: string[] = []) {
-  if (hasFlags(argv)) {
+  const { values: globals, rest } = extractGlobalFlags(argv, globalSchema);
+
+  const dir = globals.dir as string | undefined;
+  const branch = globals.branch as string | undefined;
+  const baseBranch = globals["base-branch"] as string | undefined;
+  const fetch = globals.fetch as boolean | undefined;
+  const runStartCmds = globals["run-start-cmds"] as boolean | undefined;
+
+  if (hasFlags(rest)) {
     try {
-      const flags = parseFlags(argv, flagSchema);
+      const flags = parseFlags(rest, flagSchema);
+      if (!branch) throw new Error("Missing required flag: --branch");
+
       const result = executeProject({
         alias: flags.project as string,
-        branch: flags.branch as string,
-        baseBranch: flags["base-branch"] as string | undefined,
-        fetch: flags.fetch as boolean,
-        runStartCmds: flags["run-start-cmds"] as boolean,
+        branch,
+        baseBranch,
+        fetch: fetch ?? false,
+        runStartCmds: runStartCmds ?? false,
+        dir,
       });
 
       if (!result.created) {
@@ -141,9 +159,9 @@ export async function use(argv: string[] = []) {
     process.exit(0);
   }
 
-  const cwd = process.cwd();
+  const cwd = dir ? resolve(dir) : process.cwd();
   const dirName = basename(cwd);
-  const defaultBranch = generateBranchName(dirName);
+  const defaultBranch = branch ?? generateBranchName(dirName);
 
   const results: ProjectSetupResult[] = [];
   let previousBranch = defaultBranch;
@@ -161,61 +179,83 @@ export async function use(argv: string[] = []) {
 
     const currentBranch = getCurrentBranch(project.path);
 
-    const baseBranch = await p.text({
-      message: "Base branch?",
-      initialValue: currentBranch,
-    });
-    if (p.isCancel(baseBranch)) {
-      p.cancel("Cancelled.");
-      process.exit(0);
+    let selectedBaseBranch: string;
+    if (baseBranch) {
+      selectedBaseBranch = baseBranch;
+    } else {
+      const input = await p.text({
+        message: "Base branch?",
+        initialValue: currentBranch,
+      });
+      if (p.isCancel(input)) {
+        p.cancel("Cancelled.");
+        process.exit(0);
+      }
+      selectedBaseBranch = input;
     }
 
-    const doFetch = await p.confirm({
-      message: "Pull latest from origin first?",
-      initialValue: false,
-    });
-    if (p.isCancel(doFetch)) {
-      p.cancel("Cancelled.");
-      process.exit(0);
+    let doFetch: boolean;
+    if (fetch !== undefined) {
+      doFetch = fetch;
+    } else {
+      const input = await p.confirm({
+        message: "Pull latest from origin first?",
+        initialValue: false,
+      });
+      if (p.isCancel(input)) {
+        p.cancel("Cancelled.");
+        process.exit(0);
+      }
+      doFetch = input;
     }
 
     if (doFetch) {
       const fetchSpinner = p.spinner();
-      fetchSpinner.start(`Pulling "${baseBranch}" from origin for ${project.label}...`);
+      fetchSpinner.start(`Pulling "${selectedBaseBranch}" from origin for ${project.label}...`);
       try {
-        pullBranch(baseBranch, project.path);
-        fetchSpinner.stop(`Pulled "${baseBranch}" for ${project.label}`);
+        pullBranch(selectedBaseBranch, project.path);
+        fetchSpinner.stop(`Pulled "${selectedBaseBranch}" for ${project.label}`);
       } catch (e) {
-        fetchSpinner.stop(`${pc.red("✗")} Failed to pull "${baseBranch}" for ${project.label}`);
+        fetchSpinner.stop(`${pc.red("✗")} Failed to pull "${selectedBaseBranch}" for ${project.label}`);
         p.cancel(e instanceof Error ? e.message : String(e));
         process.exit(1);
       }
     }
 
-    const branchName = await p.text({
-      message: "Branch name for the worktree?",
-      initialValue: previousBranch,
-      validate: (v) => {
-        if (!v?.trim()) return "Branch name cannot be empty";
-      },
-    });
-    if (p.isCancel(branchName)) {
-      p.cancel("Cancelled.");
-      process.exit(0);
-    }
-    previousBranch = branchName;
-
-    let runStartCmds = false;
-    if (project.startCommands.length > 0) {
-      const run = await p.confirm({
-        message: `Run start commands? (${pc.dim(project.startCommands.join(", "))})`,
-        initialValue: true,
+    let branchName: string;
+    if (branch) {
+      branchName = branch;
+    } else {
+      const input = await p.text({
+        message: "Branch name for the worktree?",
+        initialValue: previousBranch,
+        validate: (v) => {
+          if (!v?.trim()) return "Branch name cannot be empty";
+        },
       });
-      if (p.isCancel(run)) {
+      if (p.isCancel(input)) {
         p.cancel("Cancelled.");
         process.exit(0);
       }
-      runStartCmds = run;
+      branchName = input;
+      previousBranch = branchName;
+    }
+
+    let selectedRunStartCmds = false;
+    if (project.startCommands.length > 0) {
+      if (runStartCmds !== undefined) {
+        selectedRunStartCmds = runStartCmds;
+      } else {
+        const input = await p.confirm({
+          message: `Run start commands? (${pc.dim(project.startCommands.join(", "))})`,
+          initialValue: true,
+        });
+        if (p.isCancel(input)) {
+          p.cancel("Cancelled.");
+          process.exit(0);
+        }
+        selectedRunStartCmds = input;
+      }
     }
 
     const s = p.spinner();
@@ -224,9 +264,10 @@ export async function use(argv: string[] = []) {
     const result = executeProject({
       alias,
       branch: branchName,
-      baseBranch,
+      baseBranch: selectedBaseBranch,
       fetch: false, // handled above with dedicated spinner
-      runStartCmds,
+      runStartCmds: selectedRunStartCmds,
+      dir,
     });
 
     if (result.created) {
