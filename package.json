@@ -1,6 +1,6 @@
 {
   "name": "@vvinhas/wkt",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Interactive Git Worktree Manager - create and manage worktrees across multiple repositories",
   "module": "src/index.ts",
   "type": "module",
