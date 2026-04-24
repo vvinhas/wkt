@@ -275,7 +275,9 @@ export async function cleanup(argv: string[] = []) {
     return;
   }
 
-  if (process.cwd().startsWith(workspace.workspaceDir)) {
+  const cwd = process.cwd();
+  const dir = workspace.workspaceDir;
+  if (cwd === dir || cwd.startsWith(dir + "/")) {
     p.log.warning(
       `Your shell is inside ${workspace.workspaceDir}. After deletion, cd somewhere else.`,
     );
