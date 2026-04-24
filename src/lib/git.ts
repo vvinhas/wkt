@@ -63,6 +63,7 @@ export interface WorktreeInfo {
   path: string;
   branch: string;
   isMain: boolean;
+  locked: boolean;
 }
 
 export function listWorktrees(cwd?: string): WorktreeInfo[] {
@@ -74,22 +75,23 @@ export function listWorktrees(cwd?: string): WorktreeInfo[] {
   for (const line of output.split("\n")) {
     if (line.startsWith("worktree ")) {
       if (current.path) {
-        worktrees.push(current as WorktreeInfo);
+        worktrees.push({ locked: false, ...current } as WorktreeInfo);
       }
-      current = { path: line.slice("worktree ".length), isMain: isFirst };
+      current = { path: line.slice("worktree ".length), isMain: isFirst, locked: false };
       isFirst = false;
     } else if (line.startsWith("branch ")) {
-      // refs/heads/branch-name → branch-name
       current.branch = line.slice("branch ".length).replace("refs/heads/", "");
     } else if (line === "bare") {
       current.branch = "(bare)";
     } else if (line === "detached") {
       current.branch = "(detached)";
+    } else if (line === "locked" || line.startsWith("locked ")) {
+      current.locked = true;
     }
   }
 
   if (current.path) {
-    worktrees.push(current as WorktreeInfo);
+    worktrees.push({ locked: false, ...current } as WorktreeInfo);
   }
 
   return worktrees;
