@@ -13,6 +13,7 @@ ${pc.bold("Commands:")}
   ${pc.cyan("config")}   Update a project's label or start commands
   ${pc.cyan("list")}     View active worktrees for a project
   ${pc.cyan("clear")}    Remove a worktree
+  ${pc.cyan("cleanup")}  Remove all worktrees in a workspace (and optionally the folder)
   ${pc.cyan("help")}     Show this help message
 
 ${pc.bold("Getting started:")}
@@ -31,5 +32,6 @@ ${pc.bold("Non-interactive mode:")}
   ${pc.cyan("wkt config")} --alias <name> [--label <name>] [--start-cmds <cmds>]
   ${pc.cyan("wkt list")}   --alias <name>
   ${pc.cyan("wkt clear")}  --alias <name> --path <worktree-path>
+  ${pc.cyan("wkt cleanup")} --dir <path> [--force] [--delete-workspace]
 `);
 }
