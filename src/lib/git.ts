@@ -122,3 +122,15 @@ export function removeWorktree(
   args.push(worktreePath);
   execFile("git", args, repoPath);
 }
+
+export function getWorktreeStatus(worktreePath: string): { dirty: boolean; dirtyCount: number } {
+  try {
+    const output = exec("git status --porcelain", worktreePath);
+    if (output === "") return { dirty: false, dirtyCount: 0 };
+    const dirtyCount = output.split("\n").filter((l) => l.length > 0).length;
+    return { dirty: true, dirtyCount };
+  } catch {
+    // Path doesn't exist or isn't a git worktree.
+    return { dirty: false, dirtyCount: 0 };
+  }
+}
