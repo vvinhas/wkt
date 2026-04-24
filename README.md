@@ -57,6 +57,7 @@ For `wkt use`, flags other than `--project` (`--dir`, `--branch`, `--base-branch
 | `config` | Update a project's label or start commands | `--alias <name> [--label <name>] [--start-cmds <a,b>]` |
 | `list` | View active worktrees for a project | `--alias <name>` |
 | `clear` | Remove a worktree | `--alias <name> --path <worktree-path>` |
+| `cleanup` | Remove all worktrees in a workspace (and optionally the folder) | `--dir <path> [--force] [--delete-workspace]` |
 | `help` | Show help message | |
 
 ### Examples
@@ -76,6 +77,15 @@ wkt list --alias api
 
 # Non-interactive: remove a worktree
 wkt clear --alias api --path /path/to/worktree
+
+# Interactive: clean up a workspace by folder name
+wkt cleanup login-redesign
+
+# Non-interactive: remove every worktree in a folder and delete the folder
+wkt cleanup --dir ~/features/login-redesign --delete-workspace
+
+# Non-interactive: force-remove even if worktrees have local changes
+wkt cleanup --dir ~/features/login-redesign --force --delete-workspace
 ```
 
 ## JSON Output
