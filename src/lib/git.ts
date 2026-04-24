@@ -112,6 +112,13 @@ export function createWorktree(repoPath: string, worktreePath: string, branch: s
   }
 }
 
-export function removeWorktree(repoPath: string, worktreePath: string): void {
-  execFile("git", ["worktree", "remove", worktreePath], repoPath);
+export function removeWorktree(
+  repoPath: string,
+  worktreePath: string,
+  opts?: { force?: boolean },
+): void {
+  const args = ["worktree", "remove"];
+  if (opts?.force) args.push("--force");
+  args.push(worktreePath);
+  execFile("git", args, repoPath);
 }
