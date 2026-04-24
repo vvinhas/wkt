@@ -21,6 +21,7 @@ import {
   type GlobalFlagSchema,
 } from "../lib/flags.ts";
 import { formatError, formatSuccess } from "../lib/output.ts";
+import { loadConfig } from "../lib/config.ts";
 
 export interface CleanupInputs {
   dir: string;
@@ -176,6 +177,14 @@ export async function cleanup(argv: string[] = []) {
   if (!name) {
     p.cancel("Usage: wkt cleanup <name>");
     process.exit(2);
+  }
+
+  const config = loadConfig();
+  const entries = Object.entries(config.projects);
+
+  if (entries.length === 0) {
+    p.cancel("No projects registered. Use `wkt add` to add one.");
+    process.exit(1);
   }
 
   const workspaces = discoverWorkspaces();
