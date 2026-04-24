@@ -14,11 +14,9 @@ import {
   type WorkspaceWorktree,
 } from "../lib/cleanup.ts";
 import {
-  extractGlobalFlags,
   hasFlags,
   parseFlags,
   type FlagSchema,
-  type GlobalFlagSchema,
 } from "../lib/flags.ts";
 import { formatError, formatSuccess } from "../lib/output.ts";
 import { loadConfig } from "../lib/config.ts";
@@ -127,12 +125,6 @@ export function executeCleanup(inputs: CleanupInputs): CleanupResult {
   return { workspaceDir: workspace.workspaceDir, removedWorktrees: removed, workspaceDeleted };
 }
 
-const globalSchema: GlobalFlagSchema[] = [
-  { name: "dir", type: "string" },
-  { name: "force", type: "boolean" },
-  { name: "delete-workspace", type: "boolean" },
-];
-
 const flagSchema: FlagSchema[] = [
   { name: "dir", type: "string", required: true },
   { name: "force", type: "boolean", required: false },
@@ -169,8 +161,7 @@ export async function cleanup(argv: string[] = []) {
   }
 
   // Interactive: positional name, no flags.
-  const { rest } = extractGlobalFlags(argv, globalSchema);
-  const name = rest.find((a) => !a.startsWith("--"));
+  const name = argv.find((a) => !a.startsWith("--"));
 
   p.intro(`${pc.bgCyan(pc.black(" wkt "))} Cleanup Workspace`);
 
