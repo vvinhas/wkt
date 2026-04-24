@@ -5,6 +5,7 @@ import { use } from "./commands/use.ts";
 import { config } from "./commands/config.ts";
 import { list } from "./commands/list.ts";
 import { clear } from "./commands/clear.ts";
+import { cleanup } from "./commands/cleanup.ts";
 import { help } from "./commands/help.ts";
 import { setJsonMode } from "./lib/output.ts";
 
@@ -35,6 +36,9 @@ switch (command) {
     break;
   case "clear":
     await clear(commandArgs);
+    break;
+  case "cleanup":
+    await cleanup(commandArgs);
     break;
   case "help":
   case "-h":
