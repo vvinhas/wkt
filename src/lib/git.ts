@@ -134,3 +134,7 @@ export function getWorktreeStatus(worktreePath: string): { dirty: boolean; dirty
     return { dirty: false, dirtyCount: 0 };
   }
 }
+
+export function pruneWorktrees(repoPath: string): void {
+  execFile("git", ["worktree", "prune"], repoPath);
+}
