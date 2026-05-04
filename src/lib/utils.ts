@@ -1,11 +1,21 @@
 import { execSync, execFileSync } from "node:child_process";
 
 export function exec(cmd: string, cwd?: string): string {
-  return execSync(cmd, { cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+  return execSync(cmd, {
+    cwd,
+    encoding: "utf-8",
+    stdio: ["pipe", "pipe", "pipe"],
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+  }).trim();
 }
 
 export function execFile(cmd: string, args: string[], cwd?: string): string {
-  return execFileSync(cmd, args, { cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+  return execFileSync(cmd, args, {
+    cwd,
+    encoding: "utf-8",
+    stdio: ["pipe", "pipe", "pipe"],
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+  }).trim();
 }
 
 export function parseRepoNameFromUrl(url: string): string {

@@ -123,22 +123,26 @@ export function removeWorktree(
   execFile("git", args, repoPath);
 }
 
-export function getWorktreeStatus(worktreePath: string): { dirty: boolean; dirtyCount: number } {
+function getStatusPorcelainLines(cwd: string): string[] {
   try {
-    const output = exec("git status --porcelain", worktreePath);
-    if (output === "") return { dirty: false, dirtyCount: 0 };
-    const dirtyCount = output.split("\n").filter((l) => l.length > 0).length;
-    return { dirty: true, dirtyCount };
+    const output = exec("git status --porcelain", cwd);
+    if (output === "") return [];
+    return output.split("\n").filter((l) => l.length > 0);
   } catch {
-    // Path doesn't exist or isn't a git worktree.
-    return { dirty: false, dirtyCount: 0 };
+    return [];
   }
+}
+
+export function getWorktreeStatus(worktreePath: string): { dirty: boolean; dirtyCount: number } {
+  const lines = getStatusPorcelainLines(worktreePath);
+  return { dirty: lines.length > 0, dirtyCount: lines.length };
 }
 
 export function pruneWorktrees(repoPath: string): void {
   execFile("git", ["worktree", "prune"], repoPath);
 }
 
+/** Exactly one of `ok` or `conflict` is true; `message` is set only when both are false. */
 export interface IntegrationResult {
   ok: boolean;
   conflict: boolean;
@@ -150,9 +154,7 @@ export function fetchRemoteBranch(branch: string, cwd: string): void {
 }
 
 function hasUnmergedPaths(cwd: string): boolean {
-  const status = exec("git status --porcelain", cwd);
-  if (status === "") return false;
-  return status.split("\n").some((line) => /^(UU|AA|DD|AU|UA|DU|UD) /.test(line));
+  return getStatusPorcelainLines(cwd).some((line) => /^(UU|AA|DD|AU|UA|DU|UD) /.test(line));
 }
 
 export function rebaseOnto(ref: string, cwd: string): IntegrationResult {
