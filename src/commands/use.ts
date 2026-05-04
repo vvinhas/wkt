@@ -7,14 +7,13 @@ import { loadConfig } from "../lib/config.ts";
 import { getCurrentBranch, pullBranch, createWorktree } from "../lib/git.ts";
 import { generateBranchName } from "../lib/utils.ts";
 import { hasFlags, parseFlags, extractGlobalFlags, type FlagSchema, type GlobalFlagSchema } from "../lib/flags.ts";
-import { formatSuccess, formatError } from "../lib/output.ts";
+import { formatSuccess, formatError, isJsonMode } from "../lib/output.ts";
 
 export interface ProjectSetupInput {
   alias: string;
   branch: string;
   baseBranch?: string;
   fetch: boolean;
-  runStartCmds: boolean;
   dir?: string;
 }
 
@@ -22,8 +21,30 @@ export interface ProjectSetupResult {
   alias: string;
   label: string;
   worktreePath: string;
+  startCommands: string[];
   created: boolean;
   errors: string[];
+}
+
+/**
+ * Runs a project's start commands inside the worktree. Streams output to the
+ * parent terminal so the user can see progress (yarn install, etc.) and any
+ * failures live. Returns null on success or an error message on failure.
+ */
+export function runStartCommands(worktreePath: string, startCommands: string[]): string | null {
+  if (startCommands.length === 0) return null;
+  const shell = process.env.SHELL || "/bin/sh";
+  const rcFile = shell.includes("zsh") ? "$HOME/.zshrc" : "$HOME/.bashrc";
+  const cmds = startCommands.join(" && ");
+  try {
+    execSync(`${shell} -l -c '. ${rcFile} 2>/dev/null; ${cmds}'`, {
+      cwd: worktreePath,
+      stdio: "inherit",
+    });
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
 }
 
 const globalSchema: GlobalFlagSchema[] = [
@@ -51,11 +72,12 @@ export function executeProject(input: ProjectSetupInput): ProjectSetupResult {
   if (input.dir && !existsSync(baseDir)) mkdirSync(baseDir, { recursive: true });
   const worktreePath = join(baseDir, input.alias);
   const errors: string[] = [];
+  const startCommands = project.startCommands;
   let created = false;
 
   if (!existsSync(project.path)) {
     errors.push(`${project.label}: repo path not found (${project.path})`);
-    return { alias: input.alias, label: project.label, worktreePath, created, errors };
+    return { alias: input.alias, label: project.label, worktreePath, startCommands, created, errors };
   }
 
   const baseBranch = input.baseBranch ?? getCurrentBranch(project.path);
@@ -70,7 +92,7 @@ export function executeProject(input: ProjectSetupInput): ProjectSetupResult {
 
   if (existsSync(worktreePath)) {
     errors.push(`${project.label}: directory already exists at ${worktreePath}`);
-    return { alias: input.alias, label: project.label, worktreePath, created, errors };
+    return { alias: input.alias, label: project.label, worktreePath, startCommands, created, errors };
   }
 
   try {
@@ -78,21 +100,10 @@ export function executeProject(input: ProjectSetupInput): ProjectSetupResult {
     created = true;
   } catch (e) {
     errors.push(`${project.label}: ${e instanceof Error ? e.message : String(e)}`);
-    return { alias: input.alias, label: project.label, worktreePath, created, errors };
+    return { alias: input.alias, label: project.label, worktreePath, startCommands, created, errors };
   }
 
-  if (input.runStartCmds && project.startCommands.length > 0) {
-    try {
-      const shell = process.env.SHELL || "/bin/sh";
-      const rcFile = shell.includes("zsh") ? "$HOME/.zshrc" : "$HOME/.bashrc";
-      const cmds = project.startCommands.join(" && ");
-      execSync(`${shell} -l -c '. ${rcFile} 2>/dev/null; ${cmds}'`, { cwd: worktreePath, stdio: "pipe" });
-    } catch (e) {
-      errors.push(`${project.label} (start commands): ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
-
-  return { alias: input.alias, label: project.label, worktreePath, created, errors };
+  return { alias: input.alias, label: project.label, worktreePath, startCommands, created, errors };
 }
 
 export async function use(argv: string[] = []) {
@@ -114,7 +125,6 @@ export async function use(argv: string[] = []) {
         branch,
         baseBranch,
         fetch: fetch ?? false,
-        runStartCmds: runStartCmds ?? false,
         dir,
       });
 
@@ -123,11 +133,21 @@ export async function use(argv: string[] = []) {
         process.exit(2);
       }
 
+      if (runStartCmds && result.startCommands.length > 0) {
+        const startErr = runStartCommands(result.worktreePath, result.startCommands);
+        if (startErr) result.errors.push(`${result.label} (start commands): ${startErr}`);
+      }
+
       const msg = "Worktree created";
       console.log(formatSuccess(
         result.errors.length > 0 ? `${msg} (with ${result.errors.length} warning(s))` : msg,
         { created: result.alias, worktreePath: result.worktreePath, errors: result.errors.length > 0 ? result.errors : undefined },
       ));
+      if (!isJsonMode()) {
+        for (const err of result.errors) {
+          console.error(`  ! ${err}`);
+        }
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error(formatError(msg, 2));
@@ -266,7 +286,6 @@ export async function use(argv: string[] = []) {
       branch: branchName,
       baseBranch: selectedBaseBranch,
       fetch: false, // handled above with dedicated spinner
-      runStartCmds: selectedRunStartCmds,
       dir,
     });
 
@@ -274,6 +293,20 @@ export async function use(argv: string[] = []) {
       s.stop(`${pc.green("✓")} Created worktree for ${project.label}`);
     } else {
       s.stop(`${pc.red("✗")} Failed to create worktree for ${project.label}`);
+    }
+
+    if (result.created && selectedRunStartCmds && result.startCommands.length > 0) {
+      // Stream output directly so the user sees progress (yarn install, etc.)
+      // and can spot real errors as they happen. Don't wrap in a spinner — its
+      // ticks collide with the child process's stdout.
+      p.log.step(`Running start commands for ${project.label}...`);
+      const startErr = runStartCommands(result.worktreePath, result.startCommands);
+      if (startErr) {
+        result.errors.push(`${result.label} (start commands): ${startErr}`);
+        p.log.error(`${pc.red("✗")} Start commands failed for ${project.label}`);
+      } else {
+        p.log.success(`${pc.green("✓")} Start commands completed for ${project.label}`);
+      }
     }
 
     results.push(result);

@@ -8,7 +8,6 @@ describe("executeProject", () => {
         alias: "nonexistent",
         branch: "feat/test",
         fetch: false,
-        runStartCmds: false,
       })
     ).toThrow("not found");
   });
@@ -19,7 +18,6 @@ describe("executeProject", () => {
         alias: "also-nonexistent",
         branch: "feat/test",
         fetch: false,
-        runStartCmds: false,
       })
     ).toThrow("not found");
   });
