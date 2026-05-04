@@ -138,3 +138,13 @@ export function getWorktreeStatus(worktreePath: string): { dirty: boolean; dirty
 export function pruneWorktrees(repoPath: string): void {
   execFile("git", ["worktree", "prune"], repoPath);
 }
+
+export interface IntegrationResult {
+  ok: boolean;
+  conflict: boolean;
+  message?: string;
+}
+
+export function fetchRemoteBranch(branch: string, cwd: string): void {
+  execFile("git", ["fetch", "origin", branch], cwd);
+}
