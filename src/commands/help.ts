@@ -14,6 +14,7 @@ ${pc.bold("Commands:")}
   ${pc.cyan("list")}     View active worktrees for a project
   ${pc.cyan("clear")}    Remove a worktree
   ${pc.cyan("cleanup")}  Remove all worktrees in a workspace (and optionally the folder)
+  ${pc.cyan("sync")}     Sync each worktree in a workspace against an origin base branch
   ${pc.cyan("help")}     Show this help message
 
 ${pc.bold("Getting started:")}
@@ -33,5 +34,7 @@ ${pc.bold("Non-interactive mode:")}
   ${pc.cyan("wkt list")}   --alias <name>
   ${pc.cyan("wkt clear")}  --alias <name> --path <worktree-path>
   ${pc.cyan("wkt cleanup")} --dir <path> [--force] [--delete-workspace]
+  ${pc.cyan("wkt sync")}    [--dir <path>] --strategy rebase|merge --base-branch <name>
+                [--new-branch <name>]
 `);
 }

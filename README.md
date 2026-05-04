@@ -58,6 +58,7 @@ For `wkt use`, flags other than `--project` (`--dir`, `--branch`, `--base-branch
 | `list` | View active worktrees for a project | `--alias <name>` |
 | `clear` | Remove a worktree | `--alias <name> --path <worktree-path>` |
 | `cleanup` | Remove all worktrees in a workspace (and optionally the folder) | `--dir <path> [--force] [--delete-workspace]` |
+| `sync` | Sync each worktree in a workspace against an origin base branch | `[--dir <path>] --strategy rebase\|merge --base-branch <name> [--new-branch <name>]` |
 | `help` | Show help message | |
 
 ### Examples
@@ -86,6 +87,15 @@ wkt cleanup --dir ~/features/login-redesign --delete-workspace
 
 # Non-interactive: force-remove even if worktrees have local changes
 wkt cleanup --dir ~/features/login-redesign --force --delete-workspace
+
+# Interactive: sync the workspace at the current directory
+wkt sync
+
+# Non-interactive: rebase every worktree in a folder against origin/main
+wkt sync --dir ~/features/login-redesign --strategy rebase --base-branch main
+
+# Non-interactive: merge instead, then start a fresh branch on top
+wkt sync --dir ~/features/login-redesign --strategy merge --base-branch main --new-branch feat/login-v2
 ```
 
 ## JSON Output
