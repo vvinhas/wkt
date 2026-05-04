@@ -174,3 +174,21 @@ export function rebaseOnto(ref: string, cwd: string): IntegrationResult {
     return { ok: false, conflict: false, message: msg };
   }
 }
+
+export function mergeFrom(ref: string, cwd: string): IntegrationResult {
+  try {
+    execFile("git", ["merge", "--no-edit", ref], cwd);
+    return { ok: true, conflict: false };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (hasUnmergedPaths(cwd)) {
+      try {
+        execFile("git", ["merge", "--abort"], cwd);
+      } catch {
+        // See note in rebaseOnto.
+      }
+      return { ok: false, conflict: true };
+    }
+    return { ok: false, conflict: false, message: msg };
+  }
+}
