@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { findWorkspace, type WorkspaceEntry } from "../../src/lib/cleanup.ts";
+import { findWorkspace, type WorkspaceEntry } from "../../src/lib/workspace.ts";
 
 const fixtures: WorkspaceEntry[] = [
   {

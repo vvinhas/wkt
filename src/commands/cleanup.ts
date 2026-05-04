@@ -12,7 +12,7 @@ import {
   findWorkspace,
   type WorkspaceEntry,
   type WorkspaceWorktree,
-} from "../lib/cleanup.ts";
+} from "../lib/workspace.ts";
 import {
   hasFlags,
   parseFlags,

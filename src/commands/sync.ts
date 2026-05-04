@@ -2,7 +2,7 @@ import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { existsSync } from "node:fs";
 import { basename, resolve } from "node:path";
-import { findWorkspace } from "../lib/cleanup.ts";
+import { findWorkspace } from "../lib/workspace.ts";
 import { loadConfig } from "../lib/config.ts";
 import {
   createBranchFrom,
