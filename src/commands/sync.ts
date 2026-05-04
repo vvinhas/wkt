@@ -43,13 +43,7 @@ export interface SyncProjectResult {
   reason?: string;
 }
 
-/** Throws if `projectPath` doesn't exist (programmer error / config drift).
- *  Returns a result for normal operational failures (dirty / fetch error / conflict). */
 export function executeSync(input: SyncProjectInput): SyncProjectResult {
-  if (!existsSync(input.projectPath)) {
-    throw new Error(`Project path not found: ${input.projectPath}`);
-  }
-
   const base = {
     alias: input.alias,
     label: input.label,
@@ -57,6 +51,10 @@ export function executeSync(input: SyncProjectInput): SyncProjectResult {
     baseBranch: input.baseBranch,
     strategy: input.strategy,
   };
+
+  if (!existsSync(input.projectPath)) {
+    return { ...base, status: "skipped", reason: "repo missing" };
+  }
 
   if (!existsSync(input.worktreePath)) {
     return { ...base, status: "skipped", reason: "worktree path missing" };
