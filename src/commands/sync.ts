@@ -7,7 +7,7 @@ import { loadConfig } from "../lib/config.ts";
 import {
   createBranchFrom,
   fetchRemoteBranch,
-  getCurrentBranch,
+  getOriginDefaultBranch,
   getWorktreeStatus,
   mergeFrom,
   rebaseOnto,
@@ -342,7 +342,7 @@ async function runInteractive(inputs: { dir: string }): Promise<void> {
       continue;
     }
 
-    const baseDefault = getCurrentBranch(wt.projectPath);
+    const baseDefault = getOriginDefaultBranch(wt.projectPath);
     const baseInput = await p.text({
       message: "Base branch?",
       initialValue: baseDefault,

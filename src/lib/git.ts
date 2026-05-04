@@ -43,6 +43,17 @@ export function getCurrentBranch(cwd?: string): string {
   }
 }
 
+/** Returns origin's default branch (the symbolic target of refs/remotes/origin/HEAD).
+ *  Falls back to the local current branch if the symbolic ref isn't set (e.g. very old clones). */
+export function getOriginDefaultBranch(cwd: string): string {
+  try {
+    const ref = exec("git symbolic-ref --short refs/remotes/origin/HEAD", cwd);
+    return ref.startsWith("origin/") ? ref.slice("origin/".length) : ref;
+  } catch {
+    return getCurrentBranch(cwd);
+  }
+}
+
 export function cloneRepo(url: string, targetDir: string): void {
   execFile("git", ["clone", url, targetDir]);
 }
