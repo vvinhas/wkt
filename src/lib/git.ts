@@ -148,3 +148,29 @@ export interface IntegrationResult {
 export function fetchRemoteBranch(branch: string, cwd: string): void {
   execFile("git", ["fetch", "origin", branch], cwd);
 }
+
+function hasUnmergedPaths(cwd: string): boolean {
+  const status = exec("git status --porcelain", cwd);
+  if (status === "") return false;
+  return status.split("\n").some((line) => /^(UU|AA|DD|AU|UA|DU|UD) /.test(line));
+}
+
+export function rebaseOnto(ref: string, cwd: string): IntegrationResult {
+  try {
+    execFile("git", ["rebase", ref], cwd);
+    return { ok: true, conflict: false };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (hasUnmergedPaths(cwd)) {
+      try {
+        execFile("git", ["rebase", "--abort"], cwd);
+      } catch {
+        // If abort fails the worktree may be in a bad state, but there is
+        // nothing useful we can do here. The caller surfaces the conflict
+        // status and the user can clean up manually.
+      }
+      return { ok: false, conflict: true };
+    }
+    return { ok: false, conflict: false, message: msg };
+  }
+}
