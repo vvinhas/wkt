@@ -5,6 +5,7 @@ import {
   mergeFrom,
   rebaseOnto,
 } from "../lib/git.ts";
+import { execFile } from "../lib/utils.ts";
 
 export type SyncStrategy = "rebase" | "merge";
 export type SyncStatus = "synced" | "skipped" | "conflict" | "failed";
@@ -68,4 +69,34 @@ export function executeSync(input: SyncProjectInput): SyncProjectResult {
   if (result.ok) return { ...base, status: "synced" };
   if (result.conflict) return { ...base, status: "conflict" };
   return { ...base, status: "failed", reason: result.message };
+}
+
+export interface NewBranchInput {
+  worktreePath: string;
+  alias: string;
+  branch: string;
+  baseBranch: string;
+}
+
+export interface NewBranchResult {
+  alias: string;
+  ok: boolean;
+  message?: string;
+}
+
+export function createNewBranchInWorktree(input: NewBranchInput): NewBranchResult {
+  try {
+    execFile(
+      "git",
+      ["checkout", "-b", input.branch, `origin/${input.baseBranch}`],
+      input.worktreePath,
+    );
+    return { alias: input.alias, ok: true };
+  } catch (e) {
+    return {
+      alias: input.alias,
+      ok: false,
+      message: e instanceof Error ? e.message : String(e),
+    };
+  }
 }
