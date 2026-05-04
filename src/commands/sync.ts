@@ -125,7 +125,11 @@ const flagSchema: FlagSchema[] = [];
 interface SyncSummary {
   workspaceDir: string;
   results: SyncProjectResult[];
-  newBranch?: { name: string; createdIn: string[] };
+  newBranch?: {
+    name: string;
+    createdIn: string[];
+    failed: { alias: string; message: string }[];
+  };
 }
 
 interface JsonResultEntry {
@@ -184,12 +188,24 @@ export async function sync(argv: string[] = []) {
 
       const counts = summarize(summary.results);
       const allUnsuccessful = counts.synced === 0;
-      const message = `Synced ${counts.synced} · skipped ${counts.skipped} · conflicts ${counts.conflict} · failed ${counts.failed}`;
+      const newBranchTail = summary.newBranch
+        ? ` · new branch in ${summary.newBranch.createdIn.length}` +
+          (summary.newBranch.failed.length > 0 ? ` (${summary.newBranch.failed.length} failed)` : "")
+        : "";
+      const message = `Synced ${counts.synced} · skipped ${counts.skipped} · conflicts ${counts.conflict} · failed ${counts.failed}${newBranchTail}`;
 
       const data = {
         workspaceDir: summary.workspaceDir,
         results: toJsonResults(summary.results),
-        ...(summary.newBranch ? { newBranch: summary.newBranch } : {}),
+        ...(summary.newBranch
+          ? {
+              newBranch: {
+                name: summary.newBranch.name,
+                createdIn: summary.newBranch.createdIn,
+                ...(summary.newBranch.failed.length > 0 ? { failed: summary.newBranch.failed } : {}),
+              },
+            }
+          : {}),
       };
 
       if (allUnsuccessful) {
@@ -250,6 +266,7 @@ function runNonInteractive(inputs: NonInteractiveInputs): SyncSummary {
     const synced = results.filter((r) => r.status === "synced");
     if (synced.length > 0) {
       const createdIn: string[] = [];
+      const failed: { alias: string; message: string }[] = [];
       for (const r of synced) {
         const out = createNewBranchInWorktree({
           worktreePath: r.worktreePath,
@@ -257,9 +274,13 @@ function runNonInteractive(inputs: NonInteractiveInputs): SyncSummary {
           branch: inputs.newBranch,
           baseBranch: r.baseBranch,
         });
-        if (out.ok) createdIn.push(out.alias);
+        if (out.ok) {
+          createdIn.push(out.alias);
+        } else {
+          failed.push({ alias: out.alias, message: out.message ?? "unknown failure" });
+        }
       }
-      newBranch = { name: inputs.newBranch, createdIn };
+      newBranch = { name: inputs.newBranch, createdIn, failed };
     }
   }
 
