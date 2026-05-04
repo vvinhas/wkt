@@ -192,3 +192,7 @@ export function mergeFrom(ref: string, cwd: string): IntegrationResult {
     return { ok: false, conflict: false, message: msg };
   }
 }
+
+export function createBranchFrom(branch: string, ref: string, cwd: string): void {
+  execFile("git", ["checkout", "-b", branch, ref], cwd);
+}

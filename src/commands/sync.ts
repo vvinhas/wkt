@@ -5,13 +5,14 @@ import { basename, resolve } from "node:path";
 import { findWorkspace } from "../lib/cleanup.ts";
 import { loadConfig } from "../lib/config.ts";
 import {
+  createBranchFrom,
   fetchRemoteBranch,
   getCurrentBranch,
   getWorktreeStatus,
   mergeFrom,
   rebaseOnto,
 } from "../lib/git.ts";
-import { execFile, generateBranchName } from "../lib/utils.ts";
+import { generateBranchName } from "../lib/utils.ts";
 import {
   extractGlobalFlags,
   hasFlags,
@@ -98,11 +99,7 @@ export interface NewBranchResult {
 
 export function createNewBranchInWorktree(input: NewBranchInput): NewBranchResult {
   try {
-    execFile(
-      "git",
-      ["checkout", "-b", input.branch, `origin/${input.baseBranch}`],
-      input.worktreePath,
-    );
+    createBranchFrom(input.branch, `origin/${input.baseBranch}`, input.worktreePath);
     return { alias: input.alias, ok: true };
   } catch (e) {
     return {
