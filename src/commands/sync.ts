@@ -261,7 +261,214 @@ function runNonInteractive(inputs: NonInteractiveInputs): SyncSummary {
   return { workspaceDir: workspace.workspaceDir, results, newBranch };
 }
 
-async function runInteractive(_inputs: { dir: string }): Promise<void> {
-  // Implemented in Task 9.
-  throw new Error("interactive sync not yet implemented");
+async function runInteractive(inputs: { dir: string }): Promise<void> {
+  p.intro(`${pc.bgCyan(pc.black(" wkt "))} Sync Workspace`);
+
+  const config = loadConfig();
+  if (Object.keys(config.projects).length === 0) {
+    p.cancel("No projects registered. Use `wkt add` to add one.");
+    process.exit(1);
+  }
+
+  const absDir = resolve(inputs.dir);
+  const matches = findWorkspace({ dir: absDir });
+  if (matches.length === 0) {
+    p.cancel(`No worktrees found in directory "${absDir}"`);
+    process.exit(1);
+  }
+  const workspace = matches[0]!;
+
+  p.log.info(`${pc.dim("workspace")}  ${pc.dim(workspace.workspaceDir)}`);
+  p.log.message(
+    `${workspace.worktrees.length} worktree${workspace.worktrees.length !== 1 ? "s" : ""} in this workspace:\n` +
+      workspace.worktrees
+        .map((wt) => `  - ${pc.bold(wt.alias)}  (${pc.dim(wt.branch)})  ${pc.dim(wt.path)}`)
+        .join("\n"),
+  );
+
+  const results: SyncProjectResult[] = [];
+
+  for (const wt of workspace.worktrees) {
+    p.log.step(`${pc.bold(`── Syncing: ${wt.projectLabel} ──`)}`);
+
+    if (!existsSync(wt.path)) {
+      p.log.warning(`Worktree path missing (${wt.path}). Skipping.`);
+      results.push({
+        alias: wt.alias,
+        label: wt.projectLabel,
+        worktreePath: wt.path,
+        baseBranch: "",
+        strategy: "rebase",
+        status: "skipped",
+        reason: "worktree path missing",
+      });
+      continue;
+    }
+
+    const status = getWorktreeStatus(wt.path);
+    if (status.dirty) {
+      p.log.warning(
+        `${wt.projectLabel} is dirty (${status.dirtyCount} change${status.dirtyCount !== 1 ? "s" : ""}). Skipping.`,
+      );
+      results.push({
+        alias: wt.alias,
+        label: wt.projectLabel,
+        worktreePath: wt.path,
+        baseBranch: "",
+        strategy: "rebase",
+        status: "skipped",
+        reason: "dirty",
+      });
+      continue;
+    }
+
+    const baseDefault = getCurrentBranch(wt.projectPath);
+    const baseInput = await p.text({
+      message: "Base branch?",
+      initialValue: baseDefault,
+      validate: (v) => {
+        if (!v?.trim()) return "Base branch cannot be empty";
+      },
+    });
+    if (p.isCancel(baseInput)) {
+      p.cancel("Cancelled.");
+      process.exit(0);
+    }
+    const baseBranch = baseInput;
+
+    const strategyInput = await p.select({
+      message: "Strategy?",
+      options: [
+        { value: "rebase", label: "rebase" },
+        { value: "merge", label: "merge" },
+      ],
+    });
+    if (p.isCancel(strategyInput)) {
+      p.cancel("Cancelled.");
+      process.exit(0);
+    }
+    const strategy = strategyInput as SyncStrategy;
+
+    const fetchSpinner = p.spinner();
+    fetchSpinner.start(`Fetching origin/${baseBranch} for ${wt.projectLabel}...`);
+    try {
+      fetchRemoteBranch(baseBranch, wt.path);
+      fetchSpinner.stop(`Fetched origin/${baseBranch} for ${wt.projectLabel}`);
+    } catch (e) {
+      fetchSpinner.stop(`${pc.red("✗")} Failed to fetch origin/${baseBranch} for ${wt.projectLabel}`);
+      const msg = e instanceof Error ? e.message : String(e);
+      p.log.error(msg);
+      results.push({
+        alias: wt.alias,
+        label: wt.projectLabel,
+        worktreePath: wt.path,
+        baseBranch,
+        strategy,
+        status: "failed",
+        reason: msg,
+      });
+      continue;
+    }
+
+    const opSpinner = p.spinner();
+    opSpinner.start(`Running ${strategy} against origin/${baseBranch}...`);
+    const ref = `origin/${baseBranch}`;
+    const opResult = strategy === "rebase" ? rebaseOnto(ref, wt.path) : mergeFrom(ref, wt.path);
+
+    if (opResult.ok) {
+      opSpinner.stop(`${pc.green("✓")} ${strategy} succeeded for ${wt.projectLabel}`);
+      results.push({
+        alias: wt.alias,
+        label: wt.projectLabel,
+        worktreePath: wt.path,
+        baseBranch,
+        strategy,
+        status: "synced",
+      });
+    } else if (opResult.conflict) {
+      opSpinner.stop(`${pc.yellow("!")} ${strategy} conflict in ${wt.projectLabel} (aborted)`);
+      p.log.warning(`Resolve manually: ${pc.cyan(`cd ${wt.path} && git ${strategy} ${ref}`)}`);
+      results.push({
+        alias: wt.alias,
+        label: wt.projectLabel,
+        worktreePath: wt.path,
+        baseBranch,
+        strategy,
+        status: "conflict",
+      });
+    } else {
+      opSpinner.stop(`${pc.red("✗")} ${strategy} failed for ${wt.projectLabel}`);
+      p.log.error(opResult.message ?? "unknown failure");
+      results.push({
+        alias: wt.alias,
+        label: wt.projectLabel,
+        worktreePath: wt.path,
+        baseBranch,
+        strategy,
+        status: "failed",
+        reason: opResult.message,
+      });
+    }
+  }
+
+  // Post-sync new branch step.
+  const synced = results.filter((r) => r.status === "synced");
+  let newBranch: { name: string; createdIn: string[] } | undefined;
+
+  if (synced.length > 0) {
+    const wantNew = await p.confirm({
+      message: "Create a new branch from the just-fetched base?",
+      initialValue: false,
+    });
+    if (p.isCancel(wantNew)) {
+      p.cancel("Cancelled.");
+      process.exit(0);
+    }
+
+    if (wantNew) {
+      const defaultName = generateBranchName(basename(workspace.workspaceDir));
+      const nameInput = await p.text({
+        message: "Branch name?",
+        initialValue: defaultName,
+        validate: (v) => {
+          if (!v?.trim()) return "Branch name cannot be empty";
+        },
+      });
+      if (p.isCancel(nameInput)) {
+        p.cancel("Cancelled.");
+        process.exit(0);
+      }
+      const branchName = nameInput;
+
+      const createSpinner = p.spinner();
+      createSpinner.start(`Creating ${branchName} in ${synced.length} worktree${synced.length !== 1 ? "s" : ""}...`);
+      const createdIn: string[] = [];
+      const failures: { alias: string; message: string }[] = [];
+      for (const r of synced) {
+        const out = createNewBranchInWorktree({
+          worktreePath: r.worktreePath,
+          alias: r.alias,
+          branch: branchName,
+          baseBranch: r.baseBranch,
+        });
+        if (out.ok) createdIn.push(out.alias);
+        else failures.push({ alias: out.alias, message: out.message ?? "unknown failure" });
+      }
+      if (failures.length === 0) {
+        createSpinner.stop(`${pc.green("✓")} Created ${branchName} in ${createdIn.length} worktree${createdIn.length !== 1 ? "s" : ""}`);
+      } else {
+        createSpinner.stop(`${pc.yellow("!")} Created ${branchName} in ${createdIn.length}/${synced.length}`);
+        for (const f of failures) {
+          p.log.error(`  ${f.alias}: ${f.message}`);
+        }
+      }
+      newBranch = { name: branchName, createdIn };
+    }
+  }
+
+  const counts = summarize(results);
+  const newBranchTail = newBranch ? ` · new branch in ${newBranch.createdIn.length}` : "";
+  p.outro(
+    `Synced ${counts.synced} · skipped ${counts.skipped} · conflicts ${counts.conflict} · failed ${counts.failed}${newBranchTail}`,
+  );
 }
