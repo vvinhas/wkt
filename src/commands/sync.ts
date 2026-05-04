@@ -38,8 +38,9 @@ export interface SyncProjectResult {
   alias: string;
   label: string;
   worktreePath: string;
-  baseBranch: string;
-  strategy: SyncStrategy;
+  /** Populated only when sync was attempted; absent for early skips. */
+  baseBranch?: string;
+  strategy?: SyncStrategy;
   status: SyncStatus;
   reason?: string;
 }
@@ -131,8 +132,8 @@ interface SyncSummary {
 
 interface JsonResultEntry {
   alias: string;
-  baseBranch: string;
-  strategy: SyncStrategy;
+  baseBranch?: string;
+  strategy?: SyncStrategy;
   status: SyncStatus;
   reason?: string;
 }
@@ -140,8 +141,8 @@ interface JsonResultEntry {
 function toJsonResults(results: SyncProjectResult[]): JsonResultEntry[] {
   return results.map((r) => ({
     alias: r.alias,
-    baseBranch: r.baseBranch,
-    strategy: r.strategy,
+    ...(r.baseBranch !== undefined ? { baseBranch: r.baseBranch } : {}),
+    ...(r.strategy !== undefined ? { strategy: r.strategy } : {}),
     status: r.status,
     ...(r.reason ? { reason: r.reason } : {}),
   }));
@@ -269,7 +270,7 @@ function runNonInteractive(inputs: NonInteractiveInputs): SyncSummary {
           worktreePath: r.worktreePath,
           alias: r.alias,
           branch: inputs.newBranch,
-          baseBranch: r.baseBranch,
+          baseBranch: inputs.baseBranch,
         });
         if (out.ok) {
           createdIn.push(out.alias);
@@ -320,8 +321,6 @@ async function runInteractive(inputs: { dir: string }): Promise<void> {
         alias: wt.alias,
         label: wt.projectLabel,
         worktreePath: wt.path,
-        baseBranch: "",
-        strategy: "rebase",
         status: "skipped",
         reason: "worktree path missing",
       });
@@ -337,8 +336,6 @@ async function runInteractive(inputs: { dir: string }): Promise<void> {
         alias: wt.alias,
         label: wt.projectLabel,
         worktreePath: wt.path,
-        baseBranch: "",
-        strategy: "rebase",
         status: "skipped",
         reason: "dirty",
       });
@@ -440,7 +437,8 @@ async function runInteractive(inputs: { dir: string }): Promise<void> {
 
   if (synced.length > 0) {
     const wantNew = await p.confirm({
-      message: "Create a new branch from the just-fetched base?",
+      message:
+        "Switch each synced worktree to a new branch off the just-fetched base? (Your synced commits stay on the previous branch and aren't carried over.)",
       initialValue: false,
     });
     if (p.isCancel(wantNew)) {
@@ -472,7 +470,7 @@ async function runInteractive(inputs: { dir: string }): Promise<void> {
           worktreePath: r.worktreePath,
           alias: r.alias,
           branch: branchName,
-          baseBranch: r.baseBranch,
+          baseBranch: r.baseBranch!,
         });
         if (out.ok) createdIn.push(out.alias);
         else failures.push({ alias: out.alias, message: out.message ?? "unknown failure" });
