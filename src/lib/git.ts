@@ -1,5 +1,6 @@
-import { exec, execFile } from "./utils.ts";
+import { existsSync } from "node:fs";
 import { resolve, join } from "node:path";
+import { exec, execFile } from "./utils.ts";
 import { WKT_DIR } from "./config.ts";
 
 export const REPOS_DIR = join(WKT_DIR, "repos");
@@ -157,13 +158,34 @@ function hasUnmergedPaths(cwd: string): boolean {
   return getStatusPorcelainLines(cwd).some((line) => /^(UU|AA|DD|AU|UA|DU|UD) /.test(line));
 }
 
+function getGitDirAbs(cwd: string): string | null {
+  try {
+    const gitDir = exec("git rev-parse --git-dir", cwd);
+    return gitDir.startsWith("/") ? gitDir : resolve(cwd, gitDir);
+  } catch {
+    return null;
+  }
+}
+
+function isRebaseInProgress(cwd: string): boolean {
+  const abs = getGitDirAbs(cwd);
+  if (!abs) return false;
+  return existsSync(`${abs}/rebase-merge`) || existsSync(`${abs}/rebase-apply`);
+}
+
+function isMergeInProgress(cwd: string): boolean {
+  const abs = getGitDirAbs(cwd);
+  if (!abs) return false;
+  return existsSync(`${abs}/MERGE_HEAD`);
+}
+
 export function rebaseOnto(ref: string, cwd: string): IntegrationResult {
   try {
     execFile("git", ["rebase", ref], cwd);
     return { ok: true, conflict: false };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    if (hasUnmergedPaths(cwd)) {
+    if (hasUnmergedPaths(cwd) || isRebaseInProgress(cwd)) {
       try {
         execFile("git", ["rebase", "--abort"], cwd);
       } catch {
@@ -183,7 +205,7 @@ export function mergeFrom(ref: string, cwd: string): IntegrationResult {
     return { ok: true, conflict: false };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    if (hasUnmergedPaths(cwd)) {
+    if (hasUnmergedPaths(cwd) || isMergeInProgress(cwd)) {
       try {
         execFile("git", ["merge", "--abort"], cwd);
       } catch {
