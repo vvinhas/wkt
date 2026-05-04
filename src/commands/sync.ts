@@ -193,14 +193,14 @@ export async function sync(argv: string[] = []) {
       };
 
       if (allUnsuccessful) {
-        console.log(formatSuccess(message, data));
+        console.error(formatError(message, 1));
         process.exit(1);
       }
 
       console.log(formatSuccess(message, data));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      const code = msg.includes("No worktrees found") ? 2 : 2;
+      const code = 2;
       console.error(formatError(msg, code));
       process.exit(code);
     }
@@ -219,6 +219,11 @@ interface NonInteractiveInputs {
 }
 
 function runNonInteractive(inputs: NonInteractiveInputs): SyncSummary {
+  const config = loadConfig();
+  if (Object.keys(config.projects).length === 0) {
+    throw new Error("No projects registered. Use `wkt add` to add one.");
+  }
+
   const absDir = resolve(inputs.dir);
   const matches = findWorkspace({ dir: absDir });
   if (matches.length === 0) {
@@ -243,17 +248,19 @@ function runNonInteractive(inputs: NonInteractiveInputs): SyncSummary {
   let newBranch: SyncSummary["newBranch"] | undefined;
   if (inputs.newBranch) {
     const synced = results.filter((r) => r.status === "synced");
-    const createdIn: string[] = [];
-    for (const r of synced) {
-      const out = createNewBranchInWorktree({
-        worktreePath: r.worktreePath,
-        alias: r.alias,
-        branch: inputs.newBranch,
-        baseBranch: r.baseBranch,
-      });
-      if (out.ok) createdIn.push(out.alias);
+    if (synced.length > 0) {
+      const createdIn: string[] = [];
+      for (const r of synced) {
+        const out = createNewBranchInWorktree({
+          worktreePath: r.worktreePath,
+          alias: r.alias,
+          branch: inputs.newBranch,
+          baseBranch: r.baseBranch,
+        });
+        if (out.ok) createdIn.push(out.alias);
+      }
+      newBranch = { name: inputs.newBranch, createdIn };
     }
-    newBranch = { name: inputs.newBranch, createdIn };
   }
 
   return { workspaceDir: workspace.workspaceDir, results, newBranch };
