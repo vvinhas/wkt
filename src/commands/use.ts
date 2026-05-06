@@ -26,6 +26,22 @@ export interface ProjectSetupResult {
   errors: string[];
 }
 
+export interface WorkspaceDirInput {
+  cwd: string;
+  dirFlag?: string;
+  createFolder?: { name: string };
+}
+
+/**
+ * Resolves the final workspace dir. Precedence: dirFlag > createFolder > cwd.
+ * Pure: no filesystem touches, no prompts. Caller is responsible for any mkdir.
+ */
+export function resolveWorkspaceDir(input: WorkspaceDirInput): string {
+  if (input.dirFlag) return resolve(input.dirFlag);
+  if (input.createFolder) return join(input.cwd, input.createFolder.name);
+  return input.cwd;
+}
+
 /**
  * Runs a project's start commands inside the worktree. Streams output to the
  * parent terminal so the user can see progress (yarn install, etc.) and any
