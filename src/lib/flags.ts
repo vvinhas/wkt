@@ -14,7 +14,7 @@ export function parseFlags(argv: string[], schema: FlagSchema[]): ParsedFlags {
 
   let i = 0;
   while (i < argv.length) {
-    const arg = argv[i];
+    const arg = argv[i]!;
 
     if (IGNORED_FLAGS.has(arg)) {
       i++;
@@ -95,7 +95,7 @@ export function extractGlobalFlags(argv: string[], schema: GlobalFlagSchema[]): 
   const rest: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
+    const arg = argv[i]!;
 
     const eqIdx = arg.startsWith("--") ? arg.indexOf("=") : -1;
     const key = eqIdx !== -1 ? arg.slice(2, eqIdx) : arg.startsWith("--") ? arg.slice(2) : undefined;
