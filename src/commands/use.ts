@@ -182,6 +182,35 @@ export async function use(argv: string[] = []) {
     process.exit(1);
   }
 
+  let createFolder: { name: string } | undefined;
+  if (!dir) {
+    const wantFolder = await p.confirm({
+      message: "Create a folder for this workspace?",
+      initialValue: false,
+    });
+    if (p.isCancel(wantFolder)) {
+      p.cancel("Cancelled.");
+      process.exit(0);
+    }
+    if (wantFolder) {
+      const name = await p.text({
+        message: "Folder name?",
+        validate: (v) => {
+          const trimmed = v?.trim();
+          if (!trimmed) return "Folder name cannot be empty";
+          if (trimmed.includes("/") || trimmed.includes("\\")) {
+            return "Folder name cannot contain path separators";
+          }
+        },
+      });
+      if (p.isCancel(name)) {
+        p.cancel("Cancelled.");
+        process.exit(0);
+      }
+      createFolder = { name: name.trim() };
+    }
+  }
+
   const selected = await p.multiselect({
     message: "Which projects do you need?",
     options: entries.map(([key, proj]) => ({
@@ -195,7 +224,11 @@ export async function use(argv: string[] = []) {
     process.exit(0);
   }
 
-  const cwd = dir ? resolve(dir) : process.cwd();
+  const cwd = resolveWorkspaceDir({
+    cwd: process.cwd(),
+    dirFlag: dir,
+    createFolder,
+  });
   const dirName = basename(cwd);
   const defaultBranch = branch ?? generateBranchName(dirName);
 
@@ -302,7 +335,7 @@ export async function use(argv: string[] = []) {
       branch: branchName,
       baseBranch: selectedBaseBranch,
       fetch: false, // handled above with dedicated spinner
-      dir,
+      dir: cwd,
     });
 
     if (result.created) {
