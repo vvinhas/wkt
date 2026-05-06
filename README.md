@@ -37,6 +37,7 @@ wkt add --url git@github.com:you/my-frontend.git
 # 2. Create worktrees for a feature
 wkt use --dir ~/features/login-redesign
 # or: cd into an existing dir first, then run `wkt use`
+# or: run `wkt use` and accept the "Create a folder?" prompt to make one for you
 
 # 3. View and manage worktrees
 wkt list    # view active worktrees
