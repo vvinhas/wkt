@@ -8,6 +8,35 @@ import { getCurrentBranch, pullBranch, createWorktree } from "../lib/git.ts";
 import { generateBranchName } from "../lib/utils.ts";
 import { hasFlags, parseFlags, extractGlobalFlags, type FlagSchema, type GlobalFlagSchema } from "../lib/flags.ts";
 import { formatSuccess, formatError, isJsonMode } from "../lib/output.ts";
+import {
+  bundlePlugin,
+  detectClaudeAssets,
+  ensureClaudeCliAvailable,
+  installPlugin,
+  registerMarketplaceIfMissing,
+} from "../lib/claude-plugins.ts";
+
+/**
+ * Bundles + installs the worktree's .claude/ as a project-scoped plugin.
+ * Returns null on success (or silent skip), an error message on failure.
+ */
+function linkClaudeForWorktree(
+  workspacePath: string,
+  alias: string,
+  worktreePath: string,
+): string | null {
+  try {
+    const assets = detectClaudeAssets(worktreePath);
+    if (assets.length === 0) return null;
+    ensureClaudeCliAvailable();
+    bundlePlugin(workspacePath, alias, worktreePath);
+    registerMarketplaceIfMissing(workspacePath);
+    installPlugin(workspacePath, alias);
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+}
 
 export interface ProjectSetupInput {
   alias: string;
@@ -69,6 +98,7 @@ const globalSchema: GlobalFlagSchema[] = [
   { name: "base-branch", type: "string" },
   { name: "fetch", type: "boolean" },
   { name: "run-start-cmds", type: "boolean" },
+  { name: "link-claude", type: "boolean" },
 ];
 
 const flagSchema: FlagSchema[] = [
@@ -130,6 +160,7 @@ export async function use(argv: string[] = []) {
   const baseBranch = globals["base-branch"] as string | undefined;
   const fetch = globals.fetch as boolean | undefined;
   const runStartCmds = globals["run-start-cmds"] as boolean | undefined;
+  const linkClaude = globals["link-claude"] as boolean | undefined;
 
   if (hasFlags(rest)) {
     try {
@@ -152,6 +183,12 @@ export async function use(argv: string[] = []) {
       if (runStartCmds && result.startCommands.length > 0) {
         const startErr = runStartCommands(result.worktreePath, result.startCommands);
         if (startErr) result.errors.push(`${result.label} (start commands): ${startErr}`);
+      }
+
+      if (linkClaude && result.created) {
+        const workspacePath = dir ? resolve(dir) : process.cwd();
+        const linkErr = linkClaudeForWorktree(workspacePath, flags.project as string, result.worktreePath);
+        if (linkErr) result.errors.push(`${result.label} (link-claude): ${linkErr}`);
       }
 
       const msg = "Worktree created";
@@ -355,6 +392,37 @@ export async function use(argv: string[] = []) {
         p.log.error(`${pc.red("✗")} Start commands failed for ${project.label}`);
       } else {
         p.log.success(`${pc.green("✓")} Start commands completed for ${project.label}`);
+      }
+    }
+
+    if (result.created) {
+      const detectedAssets = detectClaudeAssets(result.worktreePath);
+      if (detectedAssets.length > 0) {
+        let shouldLink: boolean;
+        if (linkClaude !== undefined) {
+          shouldLink = linkClaude;
+        } else {
+          const input = await p.confirm({
+            message: `Bundle ${pc.bold(project.label)}'s .claude/ as a Claude plugin in this workspace?`,
+            initialValue: false,
+          });
+          if (p.isCancel(input)) {
+            p.cancel("Cancelled.");
+            process.exit(0);
+          }
+          shouldLink = input;
+        }
+        if (shouldLink) {
+          const linkSpinner = p.spinner();
+          linkSpinner.start(`Linking ${project.label}'s .claude/ as a plugin...`);
+          const linkErr = linkClaudeForWorktree(cwd, alias, result.worktreePath);
+          if (linkErr) {
+            linkSpinner.stop(`${pc.red("✗")} Failed to link plugin for ${project.label}`);
+            result.errors.push(`${result.label} (link-claude): ${linkErr}`);
+          } else {
+            linkSpinner.stop(`${pc.green("✓")} Linked ${project.label}'s .claude/ (${detectedAssets.join(", ")})`);
+          }
+        }
       }
     }
 

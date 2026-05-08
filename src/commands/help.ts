@@ -15,6 +15,8 @@ ${pc.bold("Commands:")}
   ${pc.cyan("clear")}    Remove a worktree
   ${pc.cyan("cleanup")}  Remove all worktrees in a workspace (and optionally the folder)
   ${pc.cyan("sync")}     Sync each worktree in a workspace against an origin base branch
+  ${pc.cyan("link-claude")}    Bundle a worktree's .claude/ as a project-scoped Claude plugin
+  ${pc.cyan("unlink-claude")}  Reverse of link-claude
   ${pc.cyan("help")}     Show this help message
 
 ${pc.bold("Getting started:")}
@@ -29,12 +31,14 @@ ${pc.bold("Non-interactive mode:")}
   ${pc.cyan("wkt add")}    --url <url> [--alias <name>] [--label <name>] [--start-cmds <cmds>]
   ${pc.cyan("wkt remove")} --alias <name>
   ${pc.cyan("wkt use")}    --project <name> --branch <name> [--base-branch <name>]
-               [--fetch] [--run-start-cmds]
+               [--fetch] [--run-start-cmds] [--link-claude]
   ${pc.cyan("wkt config")} --alias <name> [--label <name>] [--start-cmds <cmds>]
   ${pc.cyan("wkt list")}   --alias <name>
   ${pc.cyan("wkt clear")}  --alias <name> --path <worktree-path>
   ${pc.cyan("wkt cleanup")} --dir <path> [--force] [--delete-workspace]
   ${pc.cyan("wkt sync")}    [--dir <path>] --strategy rebase|merge --base-branch <name>
                 [--new-branch <name>]
+  ${pc.cyan("wkt link-claude")}    [--dir <path>] (--project <name> | --all)
+  ${pc.cyan("wkt unlink-claude")}  [--dir <path>] (--project <name> | --all)
 `);
 }

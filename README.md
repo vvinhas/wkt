@@ -60,6 +60,8 @@ For `wkt use`, flags other than `--project` (`--dir`, `--branch`, `--base-branch
 | `clear` | Remove a worktree | `--alias <name> --path <worktree-path>` |
 | `cleanup` | Remove all worktrees in a workspace (and optionally the folder) | `--dir <path> [--force] [--delete-workspace]` |
 | `sync` | Sync each worktree in a workspace against an origin base branch | `[--dir <path>] --strategy rebase\|merge --base-branch <name> [--new-branch <name>]` |
+| `link-claude` | Bundle a worktree's `.claude/` as a project-scoped Claude Code plugin | `[--dir <path>] (--project <name> \| --all)` |
+| `unlink-claude` | Uninstall and remove a wkt-generated Claude plugin from a workspace | `[--dir <path>] (--project <name> \| --all)` |
 | `help` | Show help message | |
 
 ### Examples
@@ -145,6 +147,52 @@ Each project has:
 ## VS Code Workspace
 
 In interactive mode, `wkt use` can generate a `.code-workspace` file that includes all created worktrees as folders and optionally open it in VS Code.
+
+## Claude Code plugins
+
+Each worktree's `.claude/` directory (its `agents/`, `skills/`, `commands/`, and `hooks/`) can be bundled as a workspace-scoped Claude Code plugin. When linked, opening Claude Code from the workspace root auto-loads every worktree's assets — no need to `cd` into each one.
+
+`wkt use` asks once per project (default no), or pass `--link-claude` to opt in for all selected projects:
+
+```bash
+wkt use --project api --branch feat/login --link-claude
+```
+
+After linking, the workspace contains:
+
+```
+<workspace>/
+├── api/                                 # the worktree
+│   └── .claude/                         # untouched, lives in the worktree
+└── .claude/
+    ├── settings.json                    # extraKnownMarketplaces + enabledPlugins
+    └── marketplaces/wkt/
+        ├── .claude-plugin/marketplace.json
+        └── plugins/api/
+            ├── .claude-plugin/plugin.json
+            ├── agents → ../../../../../api/.claude/agents
+            ├── skills → ../../../../../api/.claude/skills
+            └── commands → ...
+```
+
+Symlinks are relative, so edits inside the worktree show up live in the plugin. `wkt cleanup` automatically uninstalls the plugin and removes the marketplace dir when the last worktree is gone — no manual cleanup needed.
+
+To link or unlink after the fact:
+
+```bash
+# Link a single worktree, or all of them
+wkt link-claude --project api
+wkt link-claude --all
+
+# Reverse
+wkt unlink-claude --project api
+wkt unlink-claude --all
+
+# Or interactively (multiselect from the worktrees in the current dir)
+cd ~/features/login-redesign && wkt link-claude
+```
+
+Requires Claude Code installed (`claude --version`). The plugin is registered at **project scope**, so it only loads in that workspace.
 
 ## Requirements
 

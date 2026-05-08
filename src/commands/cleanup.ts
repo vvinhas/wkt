@@ -20,6 +20,12 @@ import {
 } from "../lib/flags.ts";
 import { formatError, formatSuccess } from "../lib/output.ts";
 import { loadConfig } from "../lib/config.ts";
+import {
+  ensureClaudeCliAvailable,
+  unbundlePlugin,
+  uninstallPlugin,
+  unregisterMarketplaceAndRemoveDir,
+} from "../lib/claude-plugins.ts";
 
 export interface CleanupInputs {
   dir: string;
@@ -38,6 +44,41 @@ export interface CleanupResult {
   workspaceDir: string;
   removedWorktrees: RemovedWorktreeRecord[];
   workspaceDeleted: boolean;
+  pluginWarnings: string[];
+}
+
+function isClaudeCliAvailable(): boolean {
+  try {
+    ensureClaudeCliAvailable();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function teardownPlugin(
+  workspacePath: string,
+  alias: string,
+  claudeAvailable: boolean,
+  warnings: string[],
+): boolean {
+  if (claudeAvailable) {
+    try {
+      uninstallPlugin(workspacePath, alias);
+    } catch (e) {
+      warnings.push(
+        `${alias}: failed to uninstall plugin — ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+  try {
+    return unbundlePlugin(workspacePath, alias).marketplaceEmpty;
+  } catch (e) {
+    warnings.push(
+      `${alias}: failed to unbundle plugin wrapper — ${e instanceof Error ? e.message : String(e)}`,
+    );
+    return false;
+  }
 }
 
 type Classification = "clean" | "dirty" | "locked" | "missing";
@@ -94,11 +135,17 @@ export function executeCleanup(inputs: CleanupInputs): CleanupResult {
 
   const removed: RemovedWorktreeRecord[] = [];
   const projectsWithMissing = new Set<string>();
+  const pluginWarnings: string[] = [];
+  const claudeAvailable = isClaudeCliAvailable();
+  let marketplaceEmpty = false;
 
   for (const c of classified) {
     if (c.classification === "missing") {
       projectsWithMissing.add(c.worktree.projectPath);
       continue;
+    }
+    if (teardownPlugin(workspace.workspaceDir, c.worktree.alias, claudeAvailable, pluginWarnings)) {
+      marketplaceEmpty = true;
     }
     const forced = c.classification === "dirty" || c.classification === "locked";
     removeWorktree(c.worktree.projectPath, c.worktree.path, { force: forced });
@@ -114,6 +161,16 @@ export function executeCleanup(inputs: CleanupInputs): CleanupResult {
     pruneWorktrees(projectPath);
   }
 
+  if (marketplaceEmpty && claudeAvailable) {
+    try {
+      unregisterMarketplaceAndRemoveDir(workspace.workspaceDir);
+    } catch (e) {
+      pluginWarnings.push(
+        `failed to unregister wkt marketplace — ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
   let workspaceDeleted = false;
   if (inputs.deleteWorkspace) {
     if (existsSync(workspace.workspaceDir)) {
@@ -122,7 +179,12 @@ export function executeCleanup(inputs: CleanupInputs): CleanupResult {
     workspaceDeleted = true;
   }
 
-  return { workspaceDir: workspace.workspaceDir, removedWorktrees: removed, workspaceDeleted };
+  return {
+    workspaceDir: workspace.workspaceDir,
+    removedWorktrees: removed,
+    workspaceDeleted,
+    pluginWarnings,
+  };
 }
 
 const flagSchema: FlagSchema[] = [
@@ -149,6 +211,7 @@ export async function cleanup(argv: string[] = []) {
           workspaceDir: result.workspaceDir,
           removed: result.removedWorktrees,
           workspaceDeleted: result.workspaceDeleted,
+          pluginWarnings: result.pluginWarnings.length > 0 ? result.pluginWarnings : undefined,
         }),
       );
     } catch (e) {
@@ -241,11 +304,17 @@ export async function cleanup(argv: string[] = []) {
   s.start("Removing worktrees...");
   const projectsWithMissing = new Set<string>();
   const removed: RemovedWorktreeRecord[] = [];
+  const pluginWarnings: string[] = [];
+  const claudeAvailable = isClaudeCliAvailable();
+  let marketplaceEmpty = false;
   try {
     for (const c of classified) {
       if (c.classification === "missing") {
         projectsWithMissing.add(c.worktree.projectPath);
         continue;
+      }
+      if (teardownPlugin(workspace.workspaceDir, c.worktree.alias, claudeAvailable, pluginWarnings)) {
+        marketplaceEmpty = true;
       }
       const forced = useForce && (c.classification === "dirty" || c.classification === "locked");
       removeWorktree(c.worktree.projectPath, c.worktree.path, { force: forced });
@@ -259,11 +328,23 @@ export async function cleanup(argv: string[] = []) {
     for (const projectPath of projectsWithMissing) {
       pruneWorktrees(projectPath);
     }
+    if (marketplaceEmpty && claudeAvailable) {
+      try {
+        unregisterMarketplaceAndRemoveDir(workspace.workspaceDir);
+      } catch (e) {
+        pluginWarnings.push(
+          `failed to unregister wkt marketplace — ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+    }
     s.stop(`${pc.green("✓")} Removed ${removed.length} worktree${removed.length !== 1 ? "s" : ""}`);
   } catch (e) {
     s.stop(`${pc.red("✗")} Failed removing worktrees`);
     p.log.error(e instanceof Error ? e.message : String(e));
     process.exit(2);
+  }
+  for (const w of pluginWarnings) {
+    p.log.warning(w);
   }
 
   const deleteFolder = await p.confirm({

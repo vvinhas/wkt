@@ -7,6 +7,8 @@ import { list } from "./commands/list.ts";
 import { clear } from "./commands/clear.ts";
 import { cleanup } from "./commands/cleanup.ts";
 import { sync } from "./commands/sync.ts";
+import { linkClaude } from "./commands/link-claude.ts";
+import { unlinkClaude } from "./commands/unlink-claude.ts";
 import { help } from "./commands/help.ts";
 import { setJsonMode } from "./lib/output.ts";
 
@@ -43,6 +45,12 @@ switch (command) {
     break;
   case "sync":
     await sync(commandArgs);
+    break;
+  case "link-claude":
+    await linkClaude(commandArgs);
+    break;
+  case "unlink-claude":
+    await unlinkClaude(commandArgs);
     break;
   case "help":
   case "-h":
