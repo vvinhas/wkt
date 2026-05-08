@@ -48,13 +48,13 @@ wkt clear   # remove a worktree
 
 Every command works in two modes: **interactive** (no flags, TUI prompts) and **non-interactive** (all options as flags, for scripts and AI agents).
 
-For `wkt use`, flags other than `--project` (`--dir`, `--branch`, `--base-branch`, `--fetch`, `--run-start-cmds`) can also be mixed with interactive mode -- any flag you pass pre-fills and skips its matching prompt.
+For `wkt use`, flags other than `--project` (`--dir`, `--branch`, `--base-branch`, `--fetch`, `--run-start-cmds`, `--link-claude`) can also be mixed with interactive mode -- any flag you pass pre-fills and skips its matching prompt.
 
 | Command | Description | Non-interactive flags |
 |---------|-------------|----------------------|
 | `add` | Clone a repo and register it as a project | `--url <url> [--alias <name>] [--label <name>] [--start-cmds <a,b>]` |
 | `remove` | Remove a saved project | `--alias <name>` |
-| `use` | Create worktrees for selected projects | `--project <name> --branch <name> [--base-branch <name>] [--fetch] [--run-start-cmds] [--dir <path>]` |
+| `use` | Create worktrees for selected projects | `--project <name> --branch <name> [--base-branch <name>] [--fetch] [--run-start-cmds] [--link-claude] [--dir <path>]` |
 | `config` | Update a project's label or start commands | `--alias <name> [--label <name>] [--start-cmds <a,b>]` |
 | `list` | View active worktrees for a project | `--alias <name>` |
 | `clear` | Remove a worktree | `--alias <name> --path <worktree-path>` |
@@ -99,6 +99,12 @@ wkt sync --dir ~/features/login-redesign --strategy rebase --base-branch main
 
 # Non-interactive: merge instead, then start a fresh branch on top
 wkt sync --dir ~/features/login-redesign --strategy merge --base-branch main --new-branch feat/login-v2
+
+# Non-interactive: create a worktree and link its .claude/ as a workspace-scoped plugin
+wkt use --project api --branch feat/login --dir ~/features/login-redesign --link-claude
+
+# Non-interactive: link every worktree in a workspace after the fact
+wkt link-claude --dir ~/features/login-redesign --all
 ```
 
 ## JSON Output
